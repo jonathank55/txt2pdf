@@ -54,7 +54,7 @@ if [ "$FONT_INSTALLED" = false ]; then
     if [ -d "$SCRIPT_SRC_DIR/fonts" ] && [ -f "$SCRIPT_SRC_DIR/fonts/PTSerif-Regular.ttf" ]; then
         cp "$SCRIPT_SRC_DIR/fonts"/PTSerif*.ttf "$FONTS_DIR/"
     else
-        RAW_FONT_BASE="https://raw.githubusercontent.com/jonathanklatchko/txt2pdf/main/fonts"
+        RAW_FONT_BASE="https://raw.githubusercontent.com/jonathank55/txt2pdf/main/fonts"
         for font_file in "${FONT_FILES[@]}"; do
             echo -e "    Lade $font_file herunter..."
             curl -fsSL "$RAW_FONT_BASE/$font_file" -o "$FONTS_DIR/$font_file"
@@ -82,7 +82,7 @@ TARGET_BIN="$INSTALL_DIR/txt2pdf"
 if [ -f "$SCRIPT_SRC_DIR/txt2pdf" ]; then
     cp "$SCRIPT_SRC_DIR/txt2pdf" "$TARGET_BIN"
 else
-    RAW_URL="https://raw.githubusercontent.com/jonathanklatchko/txt2pdf/main/txt2pdf"
+    RAW_URL="https://raw.githubusercontent.com/jonathank55/txt2pdf/main/txt2pdf"
     echo -e "${BLUE}==>${NC} Lade txt2pdf herunter..."
     curl -fsSL "$RAW_URL" -o "$TARGET_BIN" || {
         echo -e "${RED}Fehler:${NC} Download von txt2pdf fehlgeschlagen."

@@ -7,14 +7,14 @@ Ein eigenständiges Werkzeug zur typografischen Umwandlung von Text-, Markdown- 
 ### Einzeiler via Terminal (Internet-Installation)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jonathanklatchko/txt2pdf/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jonathank55/txt2pdf/main/install.sh | bash
 ```
 
 ### Manuelle Installation
 
 1. Repository klonen:
    ```bash
-   git clone https://github.com/jonathanklatchko/txt2pdf.git
+   git clone https://github.com/jonathank55/txt2pdf.git
    cd txt2pdf
    ```
 2. Installationsskript ausführen:
