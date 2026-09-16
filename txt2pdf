@@ -1039,6 +1039,9 @@ def convert_txt_to_pdf(
 
     if fmt == "apa":
         try:
+            config_scripts = os.path.expanduser("~/.gemini/config/scripts")
+            if config_scripts not in sys.path:
+                sys.path.insert(0, config_scripts)
             from apa_essay_compiler import convert_apa_to_pdf
             res_dict = convert_apa_to_pdf(
                 input_source=abs_input,
@@ -1046,7 +1049,7 @@ def convert_txt_to_pdf(
                 title_override=title,
                 author_override=author,
                 date_override=date,
-                course_override="General Academic Essay",
+                course_override=None,
                 deep_research=False,
                 preview=open_preview
             )
