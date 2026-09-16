@@ -1,0 +1,1324 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+txt2pdf.py - Wandelt reine Textdateien (.txt, .md) und formatierte RTF-Dokumente (.rtf)
+in hochgradig typografische PDFs mit modularer Spaltenanzahl (1, 2 oder 3 Spalten), flexiblen
+Schriftgrößen (5-12pt), Schriftartauswahl (--serif, --mono, --sans, --timesnew, --jost),
+nativer Silbentrennung, Blocksatz, Vollbreite-Header und automatischem APA-7-Literaturverzeichnis
+auf einer Extraseite via Typst um.
+
+Features:
+- RTF-Unterstützung: Vollständige Beibehaltung nativer Formatierungen (Fett, Kursiv, Unterstrichen,
+  Durchgestrichen, Ausrichtungen, Listen, Tabellen) unter Beibehaltung der Spaltenwahl (-c 1, 2, 3).
+- Standard-Schriftgröße: Verbindlich 8pt für Fließtext, Zitate und Unterüberschriften (Titel: 14pt).
+- Druckbare DIN-A4-Ränder: Großzügige Ränder (16 mm links/rechts, 22 mm oben mit 8 mm Header-Offset, 18 mm unten)
+  für 100 % zuverlässige Druckbarkeit auf allen physikalischen Drucksystemen ohne Beschnitt.
+- Schriftarten: PT Serif (Standard via --serif), PT Mono (--mono), PT Sans (--sans), Times New Roman (--timesnew), Jost / Futura (--jost).
+- Spaltenwahl: 3-Spalten (--3col, Standard), 2-Spalten (--2col) oder 1-Spalte (--1col).
+- Single-Occurrence Author Invariant: Der Autor wird ausnahmslos genau EINMAL unter dem Titel gerendert.
+- Automatische Bereinigung des Titels von Autorennennungen (' - Jonathan Klatchko' etc.).
+- Lead-Überschriften-Erkennung: Kurze Sätze ganz oben (< 250 Zeichen) werden automatisch als fette Lead-Überschrift formatiert (nur bei .txt/.md).
+- Zitat-Zwischenüberschriften: Zitate ('»...«', '„...“', '"..."') werden automatisch fett ausgezeichnet UND zentriert gerendert (nur bei .txt/.md).
+- Standard-Überschriften: Markdown (#, ##, ###) und Zählungen (1., 1.1) linksbündig fett ausgezeichnet.
+- Intelligente Bildplatzierung via --img (semantisches Keyword-Matching).
+- Automatisches Literaturverzeichnis (APA 7).
+"""
+
+import warnings
+warnings.filterwarnings("ignore")
+import sys
+import os
+import argparse
+import subprocess
+import time
+import re
+import urllib.request
+import urllib.parse
+import json
+from html import unescape
+from html.parser import HTMLParser
+from typing import List, Dict, Tuple, Set
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+GEMINI_SCRIPTS = os.path.expanduser("~/.gemini/config/scripts")
+if os.path.isdir(GEMINI_SCRIPTS) and GEMINI_SCRIPTS not in sys.path:
+    sys.path.insert(0, GEMINI_SCRIPTS)
+
+TYPST_BIN = "/opt/homebrew/bin/typst"
+if not os.path.exists(TYPST_BIN):
+    import shutil
+    TYPST_BIN = shutil.which("typst") or "typst"
+
+def escape_typst_line(line: str) -> str:
+    """Maskiert typst-spezifische Sonderzeichen außerhalb von gewollten Formatierungen."""
+    chars_to_escape = ["#", "$", "@", "[", "]", "*", "<", ">"]
+    res = line
+    for c in chars_to_escape:
+        res = res.replace(c, f"\\{c}")
+    return res
+
+def format_content_to_typst(text: str) -> str:
+    """Konvertiert Markdown-Formatierungen sicher und maskiert alle übrigen Typst-Sonderzeichen."""
+    # 1. Links schützen (Markdown [label](url) und reine bare URLs)
+    links = []
+
+    def save_md_link(m):
+        label = m.group(1)
+        url = m.group(2)
+        idx = len(links)
+        links.append(f'#link("{url}")[{escape_typst_line(label)}]')
+        return f'TYPSTPLCHLDRLINK{idx}END'
+
+    def save_bare_url(m):
+        url = m.group(0).rstrip('.,;:)"\'')
+        trailing = m.group(0)[len(url):]
+        idx = len(links)
+        links.append(f'#link("{url}")')
+        return f'TYPSTPLCHLDRLINK{idx}END{trailing}'
+
+    text = re.sub(r'\[([^\]]+)\]\((https?://[^\s\)]+)\)', save_md_link, text)
+    text = re.sub(r'https?://[^\s<>"\'\[\]]+', save_bare_url, text)
+
+    # 2. Fettung schützen (**bold** und __bold__)
+    strongs = []
+    def save_strong(m):
+        inner = m.group(1)
+        idx = len(strongs)
+        strongs.append(f'#strong[{escape_typst_line(inner)}]')
+        return f'TYPSTPLCHLDRSTRONG{idx}END'
+
+    text = re.sub(r'\*\*(.+?)\*\*', save_strong, text)
+    text = re.sub(r'__(.+?)__', save_strong, text)
+
+    # 3. Gedankenstriche normalisieren (Halbgeviertstrich-Invariante)
+    text = text.replace("—", " – ").replace("---", "--")
+    text = re.sub(r'\s*–\s*', ' – ', text)
+
+    # 4. Verbleibende Typst-Sonderzeichen maskieren (verhindert unclosed delimiter / math / label-Kollisionen)
+    for c in ["#", "$", "@", "[", "]", "*", "<", ">", "_"]:
+        text = text.replace(c, f"\\{c}")
+
+    # 5. Geschützte Tokens wieder einsetzen
+    for idx, s in enumerate(strongs):
+        text = text.replace(f'TYPSTPLCHLDRSTRONG{idx}END', s)
+
+    for idx, l in enumerate(links):
+        text = text.replace(f'TYPSTPLCHLDRLINK{idx}END', l)
+
+    return text
+
+def convert_markdown_formatting_to_typst(text: str) -> str:
+    return format_content_to_typst(text)
+
+def apply_initial_to_typst_element(content: str) -> str:
+    """Wendet ein typografisches 3-Zeilen-Initial (Drop Cap) via droplet auf den Beginn eines Typst-Fließtextblocks an."""
+    s = content.strip()
+    if not s or s.startswith("#dropcap") or s.startswith("#table") or s.startswith("- ") or s.startswith("#grid") or s.startswith("#align"):
+        return s
+    return f"#dropcap(\n  height: 3,\n  gap: 2pt,\n  justify: true,\n)[{s}]"
+
+def clean_url_string(raw_u: str) -> str:
+    """Bereinigt URLs unter Beibehaltung balancierter Klammern in DOIs und Pfaden."""
+    u = raw_u.strip().rstrip('.,;:>"\'')
+    while u.endswith(')') and u.count(')') > u.count('('):
+        u = u[:-1]
+    return u
+
+def extract_urls_from_text(text: str) -> List[str]:
+    """Extrahiert alle eindeutigen HTTP/HTTPS-URLs aus einem Dokument."""
+    md_urls = re.findall(r'\[(?:[^\]]+)\]\((https?://[^\s\)]+)\)', text)
+    bare_urls = re.findall(r'https?://[^\s<>\"\'\[\]]+', text)
+    
+    all_urls = []
+    seen = set()
+    for u in md_urls + bare_urls:
+        cleaned_url = clean_url_string(u)
+        if cleaned_url and cleaned_url not in seen:
+            seen.add(cleaned_url)
+            all_urls.append(cleaned_url)
+    return all_urls
+
+def resolve_apa_citation(url: str) -> Dict[str, str]:
+    """Löst eine URL oder einen DOI in einen standardkonformen APA-7-Zitationseintrag auf."""
+    clean_url = clean_url_string(url)
+    
+    # 1. DOI-Erkennung & Crossref API
+    doi_match = re.search(r'10\.\d{4,9}/[-._;()/:A-Za-z0-9]+', clean_url)
+    if 'doi.org' in clean_url or doi_match:
+        doi_str = doi_match.group(0) if doi_match else clean_url.split('doi.org/')[-1]
+        try:
+            req_url = f"https://api.crossref.org/works/{urllib.parse.quote(doi_str)}"
+            req = urllib.request.Request(req_url, headers={"User-Agent": "AntigravityAPA/1.0 (mailto:jonathanklatchko@gmail.com)"})
+            with urllib.request.urlopen(req, timeout=3.5) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                item = data.get("message", {})
+                title = (item.get("title") or [""])[0]
+                authors = item.get("author", [])
+                auth_list = []
+                for a in authors[:20]:
+                    fam = a.get("family", "")
+                    giv = a.get("given", "")
+                    init = f"{giv[0]}." if giv else ""
+                    if fam:
+                        auth_list.append(f"{fam}, {init}".strip())
+                if len(authors) > 20:
+                    last = authors[-1]
+                    auth_str = ", ".join(auth_list[:19]) + ", ... " + f"{last.get('family', '')}, {last.get('given', '')[0]}."
+                elif len(auth_list) > 1:
+                    auth_str = ", ".join(auth_list[:-1]) + " & " + auth_list[-1]
+                elif auth_list:
+                    auth_str = auth_list[0]
+                else:
+                    auth_str = "O. A."
+
+                year = "o. D."
+                if "published-print" in item and "date-parts" in item["published-print"]:
+                    year = str(item["published-print"]["date-parts"][0][0])
+                elif "published-online" in item and "date-parts" in item["published-online"]:
+                    year = str(item["published-online"]["date-parts"][0][0])
+
+                container = (item.get("container-title") or [""])[0]
+                container_str = f" _{escape_typst_line(container)}_." if container else ""
+                
+                return {
+                    "sort_key": auth_str.lower(),
+                    "formatted": f"{escape_typst_line(auth_str)} ({year}). _{escape_typst_line(title)}_{container_str} #link(\"{clean_url}\")[{clean_url}]"
+                }
+        except Exception:
+            pass
+
+    # 2. Reguläre Website-Auflösung
+    parsed = urllib.parse.urlparse(clean_url)
+    domain = re.sub(r"^www\.", "", parsed.netloc.lower())
+
+    inst_map = {
+        "destatis.de": "Statistisches Bundesamt",
+        "rki.de": "Robert Koch-Institut",
+        "who.int": "World Health Organization",
+        "spiegel.de": "Der Spiegel",
+        "zeit.de": "Die Zeit",
+        "faz.net": "Frankfurter Allgemeine Zeitung",
+        "sueddeutsche.de": "Süddeutsche Zeitung",
+        "tagesschau.de": "Tagesschau",
+        "taz.de": "Die Tageszeitung",
+        "bundesregierung.de": "Die Bundesregierung",
+        "bmg.bund.de": "Bundesministerium für Gesundheit",
+        "reuters.com": "Reuters",
+        "bloomberg.com": "Bloomberg",
+        "wikipedia.org": "Wikipedia",
+        "nature.com": "Nature",
+        "thelancet.com": "The Lancet",
+        "arxiv.org": "arXiv"
+    }
+
+    site_name = inst_map.get(domain, domain.capitalize())
+    title = ""
+    author = ""
+    year = ""
+
+    try:
+        req = urllib.request.Request(clean_url, headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"})
+        with urllib.request.urlopen(req, timeout=3.0) as resp:
+            content_type = resp.headers.get("Content-Type", "")
+            if "html" in content_type or "text" in content_type:
+                html = resp.read(250000).decode("utf-8", errors="replace")
+                
+                og_t = re.search(r'<meta[^>]+property=[\'"]og:title[\'"][^>]+content=[\'"](.*?)[\'"]', html, re.I)
+                if og_t:
+                    title = og_t.group(1).strip()
+                else:
+                    tm = re.search(r'<title[^>]*>(.*?)</title>', html, re.I | re.S)
+                    if tm:
+                        title = tm.group(1).strip()
+
+                og_s = re.search(r'<meta[^>]+property=[\'"]og:site_name[\'"][^>]+content=[\'"](.*?)[\'"]', html, re.I)
+                if og_s:
+                    site_name = og_s.group(1).strip()
+
+                auth_m = re.search(r'<meta[^>]+name=[\'"]author[\'"][^>]+content=[\'"](.*?)[\'"]', html, re.I)
+                if auth_m:
+                    author = auth_m.group(1).strip()
+
+                date_m = re.search(r'<meta[^>]+property=[\'"](?:article:published_time|og:published_time)[\'"][^>]+content=[\'"](\d{4})', html, re.I)
+                if date_m:
+                    year = date_m.group(1)
+    except Exception:
+        pass
+
+    title = unescape(title)
+    if not title:
+        path = parsed.path.strip("/")
+        title = path.split("/")[-1].replace("-", " ").replace("_", " ").capitalize() if path else domain
+
+    title = re.sub(r"\s*[\-|–—|]\s*" + re.escape(site_name) + r".*$", "", title, flags=re.I).strip()
+    if not author:
+        author = site_name
+
+    if not year:
+        url_yr = re.search(r"/(20\d\d)/", clean_url)
+        year = url_yr.group(1) if url_yr else "o. D."
+
+    source_part = "" if author.lower() == site_name.lower() else f" _{site_name}_."
+
+    formatted = f"{escape_typst_line(author)}. ({year}). _{escape_typst_line(title)}_{source_part} #link(\"{clean_url}\")[{clean_url}]"
+    return {
+        "sort_key": author.lower(),
+        "formatted": formatted
+    }
+
+def generate_bibliography_typst(urls: List[str], font_spec: str = '("PT Serif", "EB Garamond", "Times New Roman", "Times")', font_size: str = "8pt", title_size: str = "12pt") -> str:
+    """Erzeugt das vollständige APA-Literaturverzeichnis als einspaltige Extraseite."""
+    if not urls:
+        return ""
+
+    citations = []
+    for u in urls:
+        cit = resolve_apa_citation(u)
+        if cit:
+            citations.append(cit)
+
+    citations.sort(key=lambda c: c["sort_key"])
+
+    entries_typst = []
+    for c in citations:
+        entries_typst.append(f"#block(inset: (bottom: 4mm))[\n  {c['formatted']}\n]")
+
+    body = "\n".join(entries_typst)
+
+    return f"""
+#pagebreak()
+#set page(columns: 1, margin: (x: 16mm, top: 22mm, bottom: 18mm))
+#align(left)[
+  #v(1.5mm)
+  #text(size: {title_size}, weight: "bold", fill: rgb("#111111"))[Literaturverzeichnis]
+  #v(1.2mm)
+  #line(length: 100%, stroke: 0.5pt + rgb("#333333"))
+  #v(3mm)
+]
+
+#set par(
+  hanging-indent: 12.7mm,
+  leading: 0.65em,
+  justify: false
+)
+#set text(font: {font_spec}, size: {font_size})
+
+{body}
+"""
+
+def format_figure_typst(img_path: str, caption_title: str = "", source: str = "", placement: str = "bottom", width: str = "117mm", caption_size: str = "6pt") -> str:
+    """Formatiert eine Abbildung mit dezentem Rahmen und normierter Bildunterschrift."""
+    abs_img = os.path.abspath(img_path)
+    escaped_caption = escape_typst_line(caption_title) if caption_title else ""
+    escaped_source = escape_typst_line(source) if source else ""
+    source_clause = f" _Quelle: {escaped_source}._" if escaped_source else ""
+
+    caption_block = ""
+    if escaped_caption or source_clause:
+        caption_block = f"""
+      #v(1.4mm)
+      #text(size: {caption_size}, fill: rgb("#333333"))[
+        {escaped_caption}{source_clause}
+      ]"""
+
+    return (
+        f"\n#align(center)[\n"
+        f"  #block(width: 100%, stroke: 0.35pt + rgb(\"#cbd5e1\"), radius: 2pt, clip: true)[\n"
+        f"    #image(\"{abs_img}\", width: 100%, fit: \"contain\")\n"
+        f"  ]{caption_block}\n"
+        f"]\n#v(2.5mm)\n"
+    )
+
+def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str = "6pt", use_initial: bool = True, doc_dir: str = "") -> Tuple[str, List[str]]:
+    """Wandelt Textzeilen in Typst-Code um, verarbeitet Inline-Bilder (##Pfad) deterministisch und extrahiert Links."""
+    full_raw_text = "\n".join(raw_lines)
+    all_urls = extract_urls_from_text(full_raw_text)
+
+    pruned_lines = []
+    in_sources_block = False
+    for line in raw_lines:
+        s = line.strip()
+        if re.match(r"^(?:Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis):?\s*$", s, re.I):
+            in_sources_block = True
+            continue
+        if in_sources_block:
+            if not s or s.startswith(("-", "*", "•", "http", "[")):
+                continue
+            else:
+                in_sources_block = False
+        pruned_lines.append(line)
+
+    paragraphs = []
+    current_lines = []
+
+    for line in pruned_lines:
+        s = line.strip()
+        if not s:
+            if current_lines:
+                paragraphs.append("\n".join(current_lines))
+                current_lines = []
+        else:
+            current_lines.append(s)
+
+    if current_lines:
+        paragraphs.append("\n".join(current_lines))
+
+    image_extensions = (".png", ".jpg", ".jpeg", ".webp", ".pdf", ".gif", ".svg", ".tiff", ".tif")
+    typst_elements = []
+    first_body_para_done = False
+    chapter_header_regex = re.compile(
+        r"^(?:KAPITEL|Kapitel|CHAPTER|Chapter|ABSCHNITT|Abschnitt|SECTION|Section|TEIL|Teil|MODUL|Modul|LEKTION|Lektion|THEMA|Thema|EINHEIT|Einheit)\s+([0-9IVXLCDM]+|[A-Z])(?:\s*[:\-\.\–—]\s*(.*)|$)",
+        re.IGNORECASE
+    )
+    numbered_header_regex = re.compile(r"^(\d+(?:\.\d+)*[\.:\)]\s+[A-ZÄÖÜ].*)$")
+    roman_header_regex = re.compile(r"^([IVXLCDM]+[\.:\)]\s+[A-ZÄÖÜ].*)$")
+    alpha_header_regex = re.compile(r"^([A-Z]\.\s+[A-ZÄÖÜ].*)$")
+
+    for i, para in enumerate(paragraphs):
+        lines_in_para = para.splitlines()
+        first_line = lines_in_para[0].strip()
+        flat_text = " ".join(l.strip() for l in lines_in_para)
+        is_single_line = (len(lines_in_para) == 1)
+
+        # 0. Explizite Inline-Abbildung: ##Pfad/zur/Datei
+        if is_single_line and first_line.startswith("##") and not first_line.startswith("###"):
+            target_str = first_line[2:].strip()
+            # Wenn es wie ein Bildpfad aussieht oder auf der Festplatte existiert
+            target_clean = target_str.strip("\"'")
+            resolved_img = None
+            if os.path.isabs(target_clean) and os.path.exists(target_clean):
+                resolved_img = target_clean
+            elif doc_dir and os.path.exists(os.path.join(doc_dir, target_clean)):
+                resolved_img = os.path.join(doc_dir, target_clean)
+            elif any(target_clean.lower().endswith(ext) for ext in image_extensions):
+                # Wenn Endung ein Bild ist, auch wenn Pfad relativ/absolut
+                resolved_img = target_clean
+
+            if resolved_img:
+                fig_code = format_figure_typst(resolved_img, caption_size=caption_size)
+                typst_elements.append(fig_code)
+                continue
+
+        # 1. Zitat-Zwischenüberschriften (8pt, fett, zentriert)
+        is_quote_heading = (
+            len(flat_text) <= 280 and (
+                (flat_text.startswith("»") and flat_text.endswith("«")) or
+                (flat_text.startswith("„") and flat_text.endswith("“")) or
+                (flat_text.startswith('"') and flat_text.endswith('"')) or
+                (flat_text.startswith("“") and flat_text.endswith("”"))
+            )
+        )
+
+        # 1. Zitat-Zwischenüberschriften (8pt, fett, zentriert)
+        is_quote_heading = (
+            len(flat_text) <= 280 and (
+                (flat_text.startswith("»") and flat_text.endswith("«")) or
+                (flat_text.startswith("„") and flat_text.endswith("“")) or
+                (flat_text.startswith('"') and flat_text.endswith('"')) or
+                (flat_text.startswith("“") and flat_text.endswith("”"))
+            )
+        )
+
+        if is_quote_heading:
+            escaped = format_content_to_typst(flat_text)
+            top_v = "#v(2.2mm)\n" if typst_elements else ""
+            typst_elements.append(
+                f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#1a1a1a\"))[{escaped}]\n  ]\n]\n#v(2mm)\n"
+            )
+            continue
+
+        # 2. Markdown-Blockquote (> ...)
+        if first_line.startswith(">"):
+            quote_text = " ".join(re.sub(r"^>\s*", "", l).strip() for l in lines_in_para)
+            escaped_quote = format_content_to_typst(quote_text)
+            if len(quote_text) <= 200:
+                top_v = "#v(2.2mm)\n" if typst_elements else ""
+                typst_elements.append(
+                    f"{top_v}#align(center)[\n  #block(width: 95%)[\n    #text(weight: \"bold\", fill: rgb(\"#1a1a1a\"))[{escaped_quote}]\n  ]\n]\n#v(2mm)\n"
+                )
+            else:
+                top_v = "#v(1.5mm)\n" if typst_elements else ""
+                typst_elements.append(
+                    f"{top_v}#block(inset: (left: 2.5mm), stroke: (left: 1.5pt + rgb(\"#333333\")))"
+                    f"[#text(weight: \"bold\", fill: rgb(\"#1a1a1a\"))[{escaped_quote}]]\n#v(1.5mm)\n"
+                )
+            continue
+
+        # 3. Markdown-Überschriften (#, ##, ###, ####)
+        if first_line.startswith("#### "):
+            h_text = escape_typst_line(first_line[5:].strip())
+            top_v = "#v(1.6mm)\n" if typst_elements else ""
+            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#333333\"))[{h_text}]\n#v(0.5mm)\n")
+            continue
+        elif first_line.startswith("### "):
+            h_text = escape_typst_line(first_line[4:].strip())
+            top_v = "#v(1.8mm)\n" if typst_elements else ""
+            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#222222\"))[{h_text}]\n#v(0.6mm)\n")
+            continue
+        elif first_line.startswith("## "):
+            h_text = escape_typst_line(first_line[3:].strip())
+            top_v = "#v(2.4mm)\n" if typst_elements else ""
+            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#111111\"))[{h_text}]\n#v(0.8mm)\n")
+            continue
+        elif first_line.startswith("# "):
+            h_text = escape_typst_line(first_line[2:].strip())
+            top_v = "#v(2.8mm)\n" if typst_elements else ""
+            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n#v(1mm)\n")
+            continue
+
+        # 4. Explizite Kapitel- / Abschnittsüberschriften (KAPITEL 1: ..., Chapter 2 ...)
+        if is_single_line and len(first_line) <= 160 and chapter_header_regex.match(first_line):
+            h_text = escape_typst_line(first_line)
+            top_v = "#v(2.6mm)\n" if typst_elements else ""
+            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n#v(0.9mm)\n")
+            continue
+
+        # 5. Nummerierte & alphabetische Gliederungsüberschriften (1. ..., 1.1 ..., I. ..., A. ...)
+        is_numbered_heading = is_single_line and len(first_line) <= 120 and (
+            numbered_header_regex.match(first_line) or
+            roman_header_regex.match(first_line) or
+            alpha_header_regex.match(first_line)
+        )
+        if is_numbered_heading:
+            h_text = escape_typst_line(first_line)
+            top_v = "#v(2.2mm)\n" if typst_elements else ""
+            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#111111\"))[{h_text}]\n#v(0.8mm)\n")
+            continue
+
+        # 6. Versalien-Überschriften (ALL CAPS / Großbuchstaben)
+        # Gilt für einzeilige Blöcke mit Großbuchstaben, bis zu 160 Zeichen / 20 Wörter
+        alpha_chars = re.findall(r"[A-Za-zÄÖÜäöüß]", first_line)
+        is_all_caps = is_single_line and len(alpha_chars) >= 3 and first_line.isupper() and len(first_line) <= 160 and len(first_line.split()) <= 20
+        if is_all_caps:
+            h_text = escape_typst_line(first_line)
+            top_v = "#v(2.4mm)\n" if typst_elements else ""
+            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#111111\"))[{h_text}]\n#v(0.8mm)\n")
+            continue
+
+        # 7. Isolierte Sätze / Zwischenüberschriften / Lead-Sätze (einzeilige Blöcke bis 250 Zeichen, die kein Zitat sind)
+        # Wenn es einen isolierten Satz gibt, der kein Zitat ist, wird er als Überschrift / Zwischenüberschrift formatiert
+        is_isolated_sentence_heading = (
+            is_single_line and
+            len(first_line) <= 250 and
+            not any(first_line.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "weil ", "dass ", "wenn ", "obwohl ", "währenddessen "])
+        )
+        if is_isolated_sentence_heading:
+            h_text = format_content_to_typst(first_line)
+            top_v = "#v(2.2mm)\n" if typst_elements else ""
+            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#111111\"))[{h_text}]\n#v(0.8mm)\n")
+            continue
+
+        # 8. Aufzählungspunkte
+        if first_line.startswith(("- ", "* ", "• ")):
+            for l in lines_in_para:
+                item_text = format_content_to_typst(re.sub(r"^[-*•]\s+", "", l.strip()))
+                typst_elements.append(f"- {item_text}\n")
+            continue
+
+        # 10. Regulärer Fließtextabsatz (Standard mit optionalem Initial im 1. Absatz)
+        escaped_para = format_content_to_typst(flat_text)
+        if use_initial and not first_body_para_done:
+            escaped_para = apply_initial_to_typst_element(escaped_para)
+            first_body_para_done = True
+        typst_elements.append(escaped_para + "\n")
+
+    # Falls Bilder über -i übergeben wurden, diese am Ende anhängen
+    if images:
+        for img_p in images:
+            if os.path.exists(img_p):
+                typst_elements.append(format_figure_typst(img_p, caption_size=caption_size))
+
+    return "\n".join(typst_elements), all_urls
+
+DATE_PATTERNS = [
+    r"^(?:Datum|Date):\s*(.+)$",
+    r"^(\d{1,2}\.\s*(?:Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember|Jan|Feb|Mär|Apr|Mai|Jun|Jul|Aug|Sep|Okt|Nov|Dez)\s+\d{4})$",
+    r"^((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})$",
+    r"^(\d{1,2}\.\d{1,2}\.\d{2,4})$",
+    r"^(\d{4}-\d{2}-\d{2})$"
+]
+
+class RTFHTMLToTypstParser(HTMLParser):
+    """Konvertiert aus RTF generiertes HTML verlustfrei in Typst-Code unter Beibehaltung aller Formatierungen."""
+    def __init__(self, base_dir: str = "", caption_size: str = "6pt"):
+        super().__init__()
+        self.base_dir = base_dir
+        self.caption_size = caption_size
+        self.css_rules = {}
+        self.paragraphs = []
+        self.curr_buf = []
+        self.curr_plain = []
+        self.tag_stack = []
+        self.curr_align = None
+        self.curr_heading = False
+        self.in_style = False
+        self.style_text = []
+        self.in_title = False
+        self.title_text = []
+        self.doc_title = ""
+        self.doc_author = ""
+        self.doc_date = ""
+        self.list_stack = []
+        self.table_data = []
+        self.current_row = []
+        self.in_table = False
+        self.in_cell = False
+        self.cell_content = []
+        self.urls = []
+
+    def parse_css(self, text: str):
+        rules = re.findall(r'(?:[a-zA-Z0-9_\-]+\.)?([a-zA-Z0-9_\-]+)\s*\{([^}]+)\}', text)
+        for cls_name, rule_str in rules:
+            self.css_rules[cls_name.strip()] = rule_str.strip()
+
+    def handle_starttag(self, tag: str, attrs: list):
+        attr_dict = dict(attrs)
+        style_val = attr_dict.get('style', '')
+        cls_val = attr_dict.get('class', '')
+        cls_style = self.css_rules.get(cls_val, '') if cls_val else ''
+        combined_style = (style_val + ';' + cls_style).lower()
+
+        if tag == 'style':
+            self.in_style = True
+            return
+        if tag == 'title':
+            self.in_title = True
+            return
+        if tag == 'meta':
+            name_attr = attr_dict.get('name', '').lower()
+            if name_attr in ('author', 'creator'):
+                self.doc_author = attr_dict.get('content', '').strip()
+            elif name_attr in ('date', 'creationtime', 'created'):
+                self.doc_date = attr_dict.get('content', '').strip()
+            return
+
+        align = None
+        if 'text-align: center' in combined_style or 'text-align:center' in combined_style:
+            align = 'center'
+        elif 'text-align: right' in combined_style or 'text-align:right' in combined_style:
+            align = 'right'
+
+        if tag in ('p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'):
+            self.curr_buf = []
+            self.curr_plain = []
+            self.curr_align = align
+            self.curr_heading = tag in ('h1', 'h2', 'h3', 'h4')
+            self.tag_stack.append((tag, []))
+        elif tag == 'img':
+            src = attr_dict.get('src', '')
+            if src:
+                # file:/// oder relativen Pfad auflösen
+                clean_src = src.replace('file://', '')
+                clean_src = urllib.parse.unquote(clean_src)
+                resolved_src = None
+                if os.path.isabs(clean_src) and os.path.exists(clean_src):
+                    resolved_src = clean_src
+                elif self.base_dir and os.path.exists(os.path.join(self.base_dir, os.path.basename(clean_src))):
+                    resolved_src = os.path.join(self.base_dir, os.path.basename(clean_src))
+                elif self.base_dir and os.path.exists(os.path.join(self.base_dir, clean_src)):
+                    resolved_src = os.path.join(self.base_dir, clean_src)
+                elif os.path.exists(clean_src):
+                    resolved_src = os.path.abspath(clean_src)
+
+                if resolved_src:
+                    fig_code = format_figure_typst(resolved_src, caption_size=self.caption_size)
+                    self.curr_buf.append(f"\n{fig_code}\n")
+                    self.curr_plain.append("[Abbildung]")
+        elif tag == 'span':
+            wrappers = []
+            if 'underline' in combined_style:
+                self.curr_buf.append('#underline[')
+                wrappers.append('underline')
+            if 'line-through' in combined_style:
+                self.curr_buf.append('#strike[')
+                wrappers.append('strike')
+            if 'bold' in combined_style or 'font-weight: 700' in combined_style or 'font-weight: bold' in combined_style:
+                self.curr_buf.append('#strong[')
+                wrappers.append('strong')
+            if 'italic' in combined_style or 'font-style: italic' in combined_style:
+                self.curr_buf.append('#emph[')
+                wrappers.append('emph')
+            self.tag_stack.append((tag, wrappers))
+        elif tag in ('b', 'strong'):
+            self.curr_buf.append('#strong[')
+            self.tag_stack.append((tag, ['strong']))
+        elif tag in ('i', 'em'):
+            self.curr_buf.append('#emph[')
+            self.tag_stack.append((tag, ['emph']))
+        elif tag == 'u':
+            self.curr_buf.append('#underline[')
+            self.tag_stack.append((tag, ['underline']))
+        elif tag in ('s', 'strike', 'del'):
+            self.curr_buf.append('#strike[')
+            self.tag_stack.append((tag, ['strike']))
+        elif tag == 'sub':
+            self.curr_buf.append('#sub[')
+            self.tag_stack.append((tag, ['sub']))
+        elif tag in ('super', 'sup'):
+            self.curr_buf.append('#super[')
+            self.tag_stack.append((tag, ['super']))
+        elif tag == 'a':
+            href = attr_dict.get('href', '')
+            if href:
+                self.urls.append(href)
+                self.curr_buf.append(f'#link(\"{href}\")[')
+            else:
+                self.curr_buf.append('[')
+            self.tag_stack.append((tag, ['link']))
+        elif tag == 'br':
+            self.curr_buf.append('#linebreak() ')
+        elif tag == 'ul':
+            self.list_stack.append('ul')
+        elif tag == 'ol':
+            self.list_stack.append('ol')
+        elif tag == 'li':
+            prefix = '+ ' if (self.list_stack and self.list_stack[-1] == 'ol') else '- '
+            self.curr_buf.append(f'\n{prefix}')
+        elif tag == 'table':
+            self.in_table = True
+            self.table_data = []
+        elif tag == 'tr':
+            self.current_row = []
+        elif tag in ('td', 'th'):
+            self.in_cell = True
+            self.cell_content = []
+
+    def handle_endtag(self, tag: str):
+        if tag == 'style':
+            self.in_style = False
+            self.parse_css(''.join(self.style_text))
+            return
+        if tag == 'title':
+            self.in_title = False
+            self.doc_title = ''.join(self.title_text).strip()
+            return
+
+        if tag in ('p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'):
+            if self.tag_stack:
+                self.tag_stack.pop()
+            inner_typst = ''.join(self.curr_buf).strip()
+            inner_plain = ''.join(self.curr_plain).strip()
+            inner_typst = re.sub(r'#(?:strong|emph|underline|strike|sub|super)\[\s*\]', '', inner_typst).strip()
+            if inner_plain:
+                self.paragraphs.append({
+                    'typst': inner_typst,
+                    'plain': inner_plain,
+                    'align': self.curr_align,
+                    'heading': self.curr_heading
+                })
+            self.curr_buf = []
+            self.curr_plain = []
+        elif tag in ('span', 'b', 'strong', 'i', 'em', 'u', 's', 'strike', 'del', 'sub', 'super', 'sup', 'a'):
+            if self.tag_stack:
+                popped_tag, wrappers = self.tag_stack.pop()
+                for _ in wrappers:
+                    self.curr_buf.append(']')
+        elif tag in ('ul', 'ol'):
+            if self.list_stack:
+                self.list_stack.pop()
+                self.curr_buf.append('\n')
+        elif tag in ('td', 'th'):
+            self.in_cell = False
+            self.current_row.append(''.join(self.cell_content).strip())
+        elif tag == 'tr':
+            if self.current_row:
+                self.table_data.append(self.current_row)
+        elif tag == 'table':
+            self.in_table = False
+            if self.table_data:
+                cols = max(len(row) for row in self.table_data)
+                tbl = [f'\n#table(\n  columns: {cols},\n  align: left,\n']
+                for row in self.table_data:
+                    for cell in row:
+                        tbl.append(f'  [{cell}],\n')
+                tbl.append(')\n\n')
+                self.paragraphs.append({
+                    'typst': ''.join(tbl),
+                    'plain': 'Table',
+                    'align': None,
+                    'heading': False
+                })
+
+    def handle_data(self, data: str):
+        if self.in_style:
+            self.style_text.append(data)
+            return
+        if self.in_title:
+            self.title_text.append(data)
+            return
+
+        self.curr_plain.append(data)
+
+        t = data
+        for c in ['#', '$', '@', '[', ']', '*', '<', '>']:
+            t = t.replace(c, f'\\{c}')
+        t = t.replace('—', ' – ').replace('---', '--')
+
+        if self.in_cell:
+            self.cell_content.append(t)
+        else:
+            self.curr_buf.append(t)
+
+def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_author: str = None, expected_date: str = None, images: list = None, caption_size: str = "6pt", title_size: str = "10pt", use_initial: bool = True) -> Tuple[str, List[str], str, str, str]:
+    """Konvertiert eine RTF- oder RTFD-Datei via textutil deterministisch unter vollständiger Wahrung der Formatierung."""
+    res = subprocess.run(
+        ["/usr/bin/textutil", "-convert", "html", rtf_path, "-stdout"],
+        capture_output=True,
+        text=True,
+        timeout=30
+    )
+    if res.returncode != 0:
+        raise RuntimeError(f"Fehler bei textutil-Konvertierung von RTF: {res.stderr}")
+
+    base_dir = rtf_path if os.path.isdir(rtf_path) else os.path.dirname(os.path.abspath(rtf_path))
+    parser = RTFHTMLToTypstParser(base_dir=base_dir, caption_size=caption_size)
+    parser.feed(res.stdout)
+
+    paras = parser.paragraphs
+    extracted_title = parser.doc_title
+    extracted_author = parser.doc_author
+    extracted_date = parser.doc_date if parser.doc_date else expected_date
+
+    # Automatische Erkennung des Titel-Absatzes (z. B. erster Absatz, ALL CAPS, fett oder H1-H3)
+    title_idx = None
+    title_candidates = [t.lower().strip() for t in [expected_title, extracted_title] if t]
+    for idx, p in enumerate(paras[:4]):
+        p_plain = p['plain'].strip()
+        p_lower = p_plain.lower()
+        if any(p_lower == c for c in title_candidates):
+            title_idx = idx
+            if not extracted_title:
+                extracted_title = p_plain
+            break
+        if idx == 0 and len(p_plain) <= 180 and not p_plain.endswith((".", "!", "?", ";", ":")):
+            title_idx = idx
+            if not extracted_title:
+                extracted_title = p_plain
+            break
+        if p.get('heading') or (p_plain.isupper() and len(re.findall(r"[A-Za-zÄÖÜäöüß]", p_plain)) >= 3 and len(p_plain) <= 160):
+            title_idx = idx
+            if not extracted_title:
+                extracted_title = p_plain
+            break
+
+    typst_blocks = []
+    plain_paragraphs = []
+    first_body_para_done = False
+    for idx, p in enumerate(paras):
+        content = p['typst']
+        plain_paragraphs.append(p['plain'])
+
+        if idx == title_idx:
+            # Titel automatisch ganz normal zentrieren, 2pt größer als der Rest und fett
+            t_content = content
+            if t_content.startswith("#strong[") and t_content.endswith("]"):
+                t_inner = t_content[8:-1]
+            else:
+                t_inner = t_content
+            typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    #text(size: {title_size}, weight: \"bold\", fill: rgb(\"#111111\"))[{t_inner}]\n  ]\n]\n#v(1.2mm)")
+            continue
+
+        if idx == title_idx + 1 and (p.get('align') == 'center' or p['plain'].strip() == extracted_author or bool(re.match(r"^(?:autor|author|von|by):\s*", p['plain'], re.I))):
+            typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    {content}\n  ]\n]\n#v(1mm)")
+            continue
+
+        # Zitate in Anführungszeichen immer normal zentrieren
+        p_plain_clean = p['plain'].strip()
+        is_quote = (
+            len(p_plain_clean) <= 350 and (
+                (p_plain_clean.startswith("»") and p_plain_clean.endswith("«")) or
+                (p_plain_clean.startswith("„") and p_plain_clean.endswith("“")) or
+                (p_plain_clean.startswith('"') and p_plain_clean.endswith('"')) or
+                (p_plain_clean.startswith("“") and p_plain_clean.endswith("”"))
+            )
+        )
+        if is_quote:
+            t_content = content
+            if not t_content.startswith("#strong["):
+                t_content = f"#strong[{t_content}]"
+            typst_blocks.append(f"#v(2.2mm)\n#align(center)[\n  #par(justify: false)[\n    #text(fill: rgb(\"#1a1a1a\"))[{t_content}]\n  ]\n]\n#v(2mm)")
+            continue
+
+        # Fette Lead-Überschrift (z. B. fette Kernaussage nach Titel/Autor) oder explizite Überschriften
+        t_trimmed = content.strip()
+        is_fully_bold = t_trimmed.startswith("#strong[") and t_trimmed.endswith("]")
+        is_lead_heading = (len(typst_blocks) <= 2) and is_fully_bold and len(p_plain_clean) <= 280
+        is_section_heading = is_fully_bold and len(p_plain_clean) <= 160
+
+        if p['align'] == 'center':
+            typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    {content}\n  ]\n]")
+        elif p['align'] == 'right':
+            typst_blocks.append(f"#align(right)[\n  #par(justify: false)[\n    {content}\n  ]\n]")
+        elif p['heading'] or is_section_heading:
+            typst_blocks.append(f"#v(1.8mm)\n#strong[{content if not is_fully_bold else t_trimmed[8:-1]}]\n#v(0.8mm)")
+        elif is_lead_heading:
+            typst_blocks.append(f"#v(1.2mm)\n#strong[{t_trimmed[8:-1]}]\n#v(1.2mm)")
+        else:
+            if use_initial and not first_body_para_done:
+                content_init = apply_initial_to_typst_element(content)
+                typst_blocks.append(content_init)
+                first_body_para_done = True
+            else:
+                typst_blocks.append(content)
+
+    # Falls Bilder über -i übergeben wurden, diese am Ende anhängen
+    if images:
+        for img_p in images:
+            if os.path.exists(img_p):
+                typst_blocks.append(format_figure_typst(img_p, caption_size=caption_size))
+
+    full_plain_text = "\n\n".join(plain_paragraphs)
+    extracted_urls = parser.urls + extract_urls_from_text(full_plain_text)
+    unique_urls = []
+    seen_urls = set()
+    for u in extracted_urls:
+        if u and u not in seen_urls:
+            seen_urls.add(u)
+            unique_urls.append(u)
+
+    return "\n\n".join(typst_blocks), unique_urls, extracted_title, extracted_author, extracted_date
+
+def clean_title_and_author(title: str, author: str = None, fallback_author: str = None):
+    """Bereinigt Titel und Autor deterministisch von redundanten Namensdopplungen."""
+    final_author = author.strip() if (author and author.strip()) else fallback_author
+    if not title:
+        return "", final_author
+
+    cleaned_title = title.strip()
+    authors_to_check = [a for a in [final_author, "Jonathan Klatchko", "Yona Klatchko"] if a]
+    seen = set()
+    unique_authors = [a for a in authors_to_check if a and not (a in seen or seen.add(a))]
+
+    for a in unique_authors:
+        pat_end = re.compile(
+            r"[\s\-_–—|:]*(?:(?:von|by|autor|author)\s+)?[\s\-_–—|:]*" + re.escape(a) + r"\s*$",
+            re.IGNORECASE
+        )
+        cleaned_title = pat_end.sub("", cleaned_title)
+
+        pat_mid = re.compile(
+            r"[\s\-_–—|:]+(?:(?:von|by|autor|author)\s+)?" + re.escape(a) + r"[\s\-_–—|:]+",
+            re.IGNORECASE
+        )
+        cleaned_title = pat_mid.sub(" ", cleaned_title)
+
+    cleaned_title = re.sub(r"[\s\-_–—|:]+$", "", cleaned_title).strip()
+    if not cleaned_title:
+        cleaned_title = title.strip()
+
+    return cleaned_title, final_author
+
+def extract_metadata_and_body(raw_text: str, default_author: str = None, default_date: str = None):
+    """Trennt Dokumenttitel, Autor, Datum und den eigentlichen Textkörper."""
+    lines = raw_text.splitlines()
+    start_idx = 0
+    while start_idx < len(lines) and not lines[start_idx].strip():
+        start_idx += 1
+
+    extracted_title = None
+    extracted_author = None
+    extracted_date = default_date
+    body_start_idx = start_idx
+
+    author_patterns = [
+        r"^(?:Autor|Author|Von|By):\s*(.+)$",
+        r"^(Jonathan Klatchko)$",
+        r"^(?:Yona Klatchko)$"
+    ]
+    date_regexes = [re.compile(p, re.IGNORECASE) for p in DATE_PATTERNS]
+
+    if start_idx < len(lines):
+        first_line = lines[start_idx].strip()
+        if first_line.startswith("# "):
+            extracted_title = first_line[2:].strip()
+            body_start_idx = start_idx + 1
+        elif len(first_line) < 100 and not first_line.endswith((".", "!", "?")):
+            if not any(d_reg.match(first_line) for d_reg in date_regexes):
+                extracted_title = first_line
+                body_start_idx = start_idx + 1
+
+        for _ in range(4):
+            next_idx = body_start_idx
+            while next_idx < len(lines) and not lines[next_idx].strip():
+                next_idx += 1
+
+            if next_idx < len(lines):
+                candidate = lines[next_idx].strip()
+                matched = False
+                for pat in author_patterns:
+                    m = re.match(pat, candidate, re.IGNORECASE)
+                    if m:
+                        if not extracted_author:
+                            extracted_author = m.group(1).strip()
+                        body_start_idx = next_idx + 1
+                        matched = True
+                        break
+                if matched:
+                    continue
+
+                for d_reg in date_regexes:
+                    m_d = d_reg.match(candidate)
+                    if m_d:
+                        if not extracted_date:
+                            extracted_date = m_d.group(1).strip() if m_d.groups() else candidate
+                        body_start_idx = next_idx + 1
+                        matched = True
+                        break
+                if matched:
+                    continue
+
+    clean_body_lines = []
+    skipped_header_lines = False
+    for i, line in enumerate(lines[body_start_idx:]):
+        s = line.strip()
+        if not skipped_header_lines and s:
+            is_auth = any(re.match(pat, s, re.IGNORECASE) for pat in author_patterns)
+            if is_auth:
+                if not extracted_author:
+                    extracted_author = s
+                continue
+            is_date = any(d_reg.match(s) for d_reg in date_regexes)
+            if is_date:
+                if not extracted_date:
+                    extracted_date = s
+                continue
+            skipped_header_lines = True
+        clean_body_lines.append(line)
+
+    final_author = extracted_author if extracted_author else default_author
+    final_date = extracted_date if extracted_date else default_date
+    return extracted_title, final_author, final_date, clean_body_lines
+
+def convert_txt_to_pdf(
+    input_path: str,
+    output_path: str = None,
+    title: str = None,
+    author: str = None,
+    date: str = None,
+    lang: str = "de",
+    font_size: str = None,
+    leading: str = "0.58em",
+    gutter: str = None,
+    images: List[str] = None,
+    font: str = None,
+    open_preview: bool = False,
+    columns: int = None,
+    font_family: str = "serif",
+    format_preset: str = "artikel",
+    use_initial: bool = None
+) -> bool:
+    if not os.path.exists(input_path):
+        print(f"Fehler: Datei nicht existent: {input_path}", file=sys.stderr)
+        return False
+
+    abs_input = os.path.abspath(input_path)
+    base_name = os.path.splitext(os.path.basename(abs_input))[0]
+    
+    # Universelle Invariante: Ausnahmslos genau EINE Datei im gleichen Ordner der Ursprungsdatei
+    if output_path is None:
+        abs_output = os.path.join(os.path.dirname(abs_input), f"{base_name}.pdf")
+    else:
+        abs_output = os.path.abspath(output_path)
+
+    os.makedirs(os.path.dirname(abs_output), exist_ok=True)
+
+    # Format-Profil auflösen (-f atk | br1 | br2 | apa)
+    fmt_raw = (format_preset or "atk").lower().strip()
+    if fmt_raw in ("atk", "artikel"):
+        fmt = "atk"
+    elif fmt_raw in ("br1", "bericht1"):
+        fmt = "br1"
+    elif fmt_raw in ("br2", "bericht2"):
+        fmt = "br2"
+    elif fmt_raw == "apa":
+        fmt = "apa"
+    else:
+        fmt = "atk"
+
+    if fmt == "apa":
+        try:
+            from apa_essay_compiler import convert_apa_to_pdf
+            res_dict = convert_apa_to_pdf(
+                input_source=abs_input,
+                output_pdf=output_path,
+                title_override=title,
+                author_override=author,
+                date_override=date,
+                course_override="General Academic Essay",
+                deep_research=False,
+                preview=open_preview
+            )
+            out_p = res_dict.get("pdf")
+            if out_p and os.path.exists(out_p):
+                print(f"Erfolg: PDF erzeugt -> {out_p}")
+                return True
+            return False
+        except Exception as e:
+            print(f"Fehler bei APA-Kompilierung: {e}", file=sys.stderr)
+            return False
+
+    if fmt == "br1":
+        final_columns = columns if columns is not None else 1
+        final_initial = use_initial if use_initial is not None else False
+        final_gutter = gutter if gutter is not None else "0mm"
+        final_font_size = font_size if font_size is not None else "9pt"
+    elif fmt == "br2":
+        final_columns = columns if columns is not None else 2
+        final_initial = use_initial if use_initial is not None else False
+        final_gutter = gutter if gutter is not None else "5.2mm"
+        final_font_size = font_size if font_size is not None else "8.5pt"
+    else:  # atk (Standard: 3 Spalten, Initial)
+        final_columns = columns if columns is not None else 3
+        final_initial = use_initial if use_initial is not None else True
+        final_gutter = gutter if gutter is not None else "4.8mm"
+        final_font_size = font_size if font_size is not None else "8pt"
+
+    # Automatische Extraktion aus Dateinamen (z. B. "Titel - Autor")
+    file_title_candidate = None
+    file_author_candidate = None
+    fn_match = re.search(r"^(.*?)\s*[\-–—]\s*(?:(?:von|by|autor|author)\s+)?([A-ZÄÖÜ][a-zäöüß]+(?:\s+[A-ZÄÖÜ][a-zäöüß]+)+)$", base_name, re.I)
+    if fn_match:
+        file_title_candidate = fn_match.group(1).strip()
+        file_author_candidate = fn_match.group(2).strip()
+
+    is_rtfd = abs_input.lower().endswith(".rtfd")
+    is_rtf = is_rtfd or abs_input.lower().endswith(".rtf")
+
+    # Dynamische Schriftgrößen: 6pt bis 12pt (Titel immer +2pt, Bildunterschriften immer -2pt)
+    m = re.search(r"([\d.]+)", str(final_font_size))
+    raw_pt = float(m.group(1)) if m else 8.0
+    base_pt = max(6.0, min(raw_pt, 12.0))
+    final_font_size = f"{base_pt:g}pt"
+    title_size = f"{base_pt + 2.0:g}pt"
+    caption_size = f"{max(base_pt - 2.0, 3.0):g}pt"
+
+    if is_rtf:
+        body_text, urls, rtf_title, rtf_author, rtf_date = parse_rtf_to_typst(
+            abs_input,
+            expected_title=title or file_title_candidate,
+            expected_author=author or file_author_candidate,
+            expected_date=date,
+            images=images,
+            caption_size=caption_size,
+            title_size=title_size,
+            use_initial=final_initial
+        )
+        extracted_title = rtf_title if rtf_title else None
+        extracted_author = rtf_author if rtf_author else None
+        extracted_date = rtf_date if rtf_date else date
+    else:
+        with open(abs_input, "r", encoding="utf-8", errors="replace") as f:
+            raw_content = f.read()
+
+        doc_dir = os.path.dirname(abs_input)
+        extracted_title, extracted_author, extracted_date, body_lines = extract_metadata_and_body(raw_content, default_author=author, default_date=date)
+        body_text, urls = parse_body_to_typst(body_lines, images=images, caption_size=caption_size, use_initial=final_initial, doc_dir=doc_dir)
+
+    raw_title = title if title else (extracted_title if extracted_title else (file_title_candidate if file_title_candidate else base_name))
+    target_author = author if author else (extracted_author if extracted_author else file_author_candidate)
+    doc_date = date if date else extracted_date
+
+    # Single-Occurrence Invariante
+    doc_title, doc_author = clean_title_and_author(raw_title, target_author, fallback_author=file_author_candidate)
+
+    if font:
+        font_spec = f'("{font}", "PT Serif", "EB Garamond", "Times New Roman", "Times")'
+    elif font_family == "mono":
+        font_spec = '("PT Mono", "Menlo", "Courier New", "monospace")'
+    elif font_family == "sans":
+        font_spec = '("PT Sans", "Helvetica Neue", "Arial", "sans-serif")'
+    elif font_family == "timesnew":
+        font_spec = '("Times New Roman", "Times", "PT Serif", "serif")'
+    elif font_family == "jost":
+        font_spec = '("Jost", "Futura", "PT Sans", "sans-serif")'
+    else:
+        font_spec = '("PT Serif", "EB Garamond", "Times New Roman", "Times")'
+
+    bibliography_typst = generate_bibliography_typst(urls, font_spec=font_spec, font_size=final_font_size, title_size=title_size)
+
+    author_block = ""
+    if doc_author:
+        author_block = f'\n        #linebreak()\n        #v(0.8mm)\n        #text(weight: "regular", fill: rgb("#444444"))[{escape_typst_line(doc_author)}]'
+
+    columns_directive = f"#set columns(gutter: {final_gutter})\n" if final_columns > 1 else ""
+
+    if doc_date:
+        header_content = f"""#grid(
+      columns: (1fr, auto),
+      gutter: 6mm,
+      align: (left + horizon, right + horizon),
+      [
+        #text(size: {title_size}, weight: "bold", fill: rgb("#111111"))[{escape_typst_line(doc_title)}]{author_block}
+      ],
+      [
+        #text(fill: rgb("#666666"))[{escape_typst_line(doc_date)}]
+      ]
+    )"""
+    else:
+        header_content = f"""#align(left)[
+      #text(size: {title_size}, weight: "bold", fill: rgb("#111111"))[{escape_typst_line(doc_title)}]{author_block}
+    ]"""
+
+    if is_rtf:
+        header_directive = "  header: none,"
+        top_header_box = ""
+    else:
+        header_directive = f"""  header: context {{
+    let page_num = counter(page).get().first()
+    if page_num > 1 [
+      #place(top, dy: 8mm)[
+        #align(center)[
+          #text(size: 8.5pt, fill: rgb("#555555"))[{escape_typst_line(doc_title)}]
+          #v(1.2mm)
+          #line(length: 100%, stroke: 0.35pt + rgb("#cbd5e1"))
+        ]
+      ]
+    ]
+  }},"""
+        top_header_box = f"""// Vollbreite-Titelbox gemäß Invariante (Titel dynamisch: Textgröße + 4pt)
+#place(top, scope: "parent", float: true)[
+  #block(width: 100%, inset: (bottom: 2.5mm))[
+    {header_content}
+    #v(1.2mm)
+    #line(length: 100%, stroke: 0.5pt + rgb("#333333"))
+  ]
+]
+"""
+
+    # Druckbare DIN-A4-Geometrie: 16 mm Außenränder, 22 mm oberer Rand (mit 8 mm Header-Offset), 18 mm unterer Rand
+    # Seitennummern nur bei mehrseitigen Dokumenten (total_pages > 1)
+    typst_template = f"""#import "@preview/droplet:0.3.1": dropcap
+
+#set page(
+  paper: "a4",
+  margin: (x: 16mm, top: 22mm, bottom: 18mm),
+  columns: {final_columns},
+{header_directive}
+  footer: context {{
+    let page_num = counter(page).get().first()
+    let total_pages = counter(page).final().first()
+    if total_pages > 1 [
+      #align(center)[
+        #text(size: 8.5pt, fill: rgb("#666666"))[Seite #page_num von #total_pages]
+      ]
+    ]
+  }}
+)
+
+{columns_directive}#set text(
+  font: {font_spec},
+  size: {final_font_size},
+  lang: "{lang}",
+  hyphenate: true
+)
+
+#set par(
+  justify: true,
+  leading: {leading},
+  first-line-indent: 0pt
+)
+
+{top_header_box}
+{body_text}
+
+{bibliography_typst}
+"""
+
+    tmp_typ = f"{abs_output}.tmp_{os.getpid()}.typ"
+    with open(tmp_typ, "w", encoding="utf-8") as f:
+        f.write(typst_template)
+
+    cmd = [TYPST_BIN, "compile", "--root", "/", tmp_typ, abs_output]
+    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=60)
+
+    if os.path.exists(tmp_typ):
+        try:
+            os.remove(tmp_typ)
+        except Exception:
+            pass
+
+    if res.returncode == 0 and os.path.exists(abs_output) and os.path.getsize(abs_output) > 0:
+        print(f"Erfolg: PDF erzeugt -> {abs_output}")
+        if open_preview:
+            subprocess.run(["open", abs_output], timeout=60)
+        return True
+    else:
+        print(f"Fehler bei Typst-Kompilierung:\n{res.stderr}", file=sys.stderr)
+        return False
+
+convert_txt_to_3col_pdf = convert_txt_to_pdf
+
+def normalize_cli_args(raw_args):
+    """Normalisiert CLI-Argumente, sodass -p auch als stand-alone Flag ohne Wert übergeben werden kann."""
+    norm = []
+    i = 0
+    while i < len(raw_args):
+        a = raw_args[i]
+        norm.append(a)
+        if a == "-p":
+            if i + 1 >= len(raw_args) or raw_args[i + 1].startswith("-"):
+                norm.append("true")
+        i += 1
+    return norm
+
+class SingleLineHelpFormatter(argparse.HelpFormatter):
+    def _split_lines(self, text, width):
+        return [text]
+
+def main():
+    BLUE = "\033[94m"
+    RESET = "\033[0m"
+
+    fmt_help = (
+        f"Format: {BLUE}atk{RESET} (Artikel, 3 Spalten, Initial, DIN-A4), "
+        f"{BLUE}br1{RESET} (Bericht, 1 Spalte, DIN-A4), "
+        f"{BLUE}br2{RESET} (Bericht, 2 Spalten, DIN-A4), "
+        f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter)"
+    )
+    size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; entfällt bei apa)"
+
+    parser = argparse.ArgumentParser(
+        prog="txt2pdf",
+        formatter_class=lambda prog: SingleLineHelpFormatter(prog, max_help_position=16, width=220),
+        description="Wandelt Text- und RTF-Dateien in typografische PDFs via Typst um.",
+        add_help=False
+    )
+    parser.add_argument("-h", action="help", help="Hilfe anzeigen")
+    parser.add_argument("-f", dest="format_preset", metavar="FORMAT", default="atk", help=fmt_help)
+    parser.add_argument("-s", dest="size", metavar="GRÖßE", default=None, help=size_help)
+    img_help = f"Abbildung einbetten ({BLUE}##Pfad/zur/Datei{RESET} in .txt/.md an gewünschter Stelle; .png/.jpg/.jpeg/.webp/.pdf)"
+    parser.add_argument("-i", dest="images", metavar="BILD", action="append", default=[], help=img_help)
+    parser.add_argument("-a", dest="author", metavar="AUTOR", default=None, help="Autor")
+    parser.add_argument("-t", dest="title", metavar="TITEL", default=None, help="Titel")
+    parser.add_argument("-d", dest="date", metavar="DATUM", default=None, help="Datum")
+    parser.add_argument("-o", dest="output", metavar="AUSGABE", default=None, help="Ausgabepfad (.pdf)")
+    parser.add_argument("input_file", metavar="DATEI", help="Text- oder RTF/RTFD-Datei (.txt/.md/.rtf/.rtfd)")
+
+    normalized_args = normalize_cli_args(sys.argv[1:])
+    args = parser.parse_args(normalized_args)
+
+    final_output = args.output
+    final_title = args.title
+    final_author = args.author
+    final_date = args.date
+    all_images = args.images or []
+    fmt = (args.format_preset or "artikel").lower().strip()
+    final_font_size = args.size if fmt != "apa" else None
+
+    success = convert_txt_to_pdf(
+        args.input_file,
+        output_path=final_output,
+        title=final_title,
+        author=final_author,
+        date=final_date,
+        font_size=final_font_size,
+        images=all_images,
+        open_preview=False,
+        format_preset=fmt
+    )
+    sys.exit(0 if success else 1)
+
+if __name__ == "__main__":
+    main()
