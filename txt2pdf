@@ -1055,7 +1055,6 @@ def convert_txt_to_pdf(
             )
             out_p = res_dict.get("pdf")
             if out_p and os.path.exists(out_p):
-                print(f"Erfolg: PDF erzeugt -> {out_p}")
                 return True
             return False
         except Exception as e:
