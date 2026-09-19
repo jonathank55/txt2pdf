@@ -1103,13 +1103,13 @@ def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_autho
                 t_inner = t_content[8:-1]
             else:
                 t_inner = t_content
-            typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    #text(size: {title_size}, weight: \"bold\", fill: rgb(\"#111111\"))[{t_inner}]\n  ]\n]\n#v(1.2mm)")
+            typst_blocks.append(f"#align(left)[\n  #par(justify: false)[\n    #text(size: {title_size}, weight: \"bold\", fill: rgb(\"#111111\"))[{t_inner}]\n  ]\n]\n#v(1.2mm)")
             continue
 
         if idx == title_idx + 1 and (is_author_name(p_plain_clean) or p.get('align') == 'center' or p_plain_clean == extracted_author or bool(re.match(r"^(?:autor|author|von|by):\s*", p_plain_clean, re.I))):
             if not extracted_author:
                 extracted_author = p_plain_clean
-            typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    {content}\n  ]\n]\n#v(1mm)")
+            typst_blocks.append(f"#align(left)[\n  #par(justify: false)[\n    {content}\n  ]\n]\n#v(1mm)")
             continue
 
         # Literaturverzeichnis-Abschnitt
@@ -1752,7 +1752,7 @@ def convert_txt_to_pdf(
     let page_num = counter(page).get().first()
     if page_num > 1 [
       #place(top, dy: 8mm)[
-        #align(center)[
+        #align(left)[
           #text(size: 8.5pt, fill: rgb("#555555"))[{escape_typst_line(doc_title)}]
           #v(1.2mm)
           #line(length: 100%, stroke: 0.35pt + rgb("#cbd5e1"))
