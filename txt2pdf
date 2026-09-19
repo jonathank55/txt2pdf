@@ -1398,7 +1398,7 @@ def convert_txt_to_pdf(
     open_preview: bool = False,
     columns: int = None,
     font_family: str = "serif",
-    format_preset: str = "artikel",
+    format_preset: str = "br2",
     use_initial: bool = None
 ) -> bool:
     if not os.path.exists(input_path):
@@ -1416,18 +1416,18 @@ def convert_txt_to_pdf(
 
     os.makedirs(os.path.dirname(abs_output), exist_ok=True)
 
-    # Format-Profil auflösen (-f atk | br1 | br2 | apa)
-    fmt_raw = (format_preset or "atk").lower().strip()
-    if fmt_raw in ("atk", "artikel"):
+    # Format-Profil auflösen (-f br2 | br1 | atk | apa; Standard: br2)
+    fmt_raw = (format_preset or "br2").lower().strip()
+    if fmt_raw in ("br2", "bericht2"):
+        fmt = "br2"
+    elif fmt_raw in ("atk", "artikel"):
         fmt = "atk"
     elif fmt_raw in ("br1", "bericht1"):
         fmt = "br1"
-    elif fmt_raw in ("br2", "bericht2"):
-        fmt = "br2"
     elif fmt_raw == "apa":
         fmt = "apa"
     else:
-        fmt = "atk"
+        fmt = "br2"
 
     if fmt == "apa":
         try:
@@ -1459,17 +1459,17 @@ def convert_txt_to_pdf(
             open_preview=open_preview
         )
 
-    if fmt == "br1":
+    if fmt == "br2":  # Standard: 2 Spalten, 11pt Textgröße
+        final_columns = columns if columns is not None else 2
+        final_initial = use_initial if use_initial is not None else False
+        final_gutter = gutter if gutter is not None else "5.2mm"
+        final_font_size = font_size if font_size is not None else "11pt"
+    elif fmt == "br1":
         final_columns = columns if columns is not None else 1
         final_initial = use_initial if use_initial is not None else False
         final_gutter = gutter if gutter is not None else "0mm"
         final_font_size = font_size if font_size is not None else "9pt"
-    elif fmt == "br2":
-        final_columns = columns if columns is not None else 2
-        final_initial = use_initial if use_initial is not None else False
-        final_gutter = gutter if gutter is not None else "5.2mm"
-        final_font_size = font_size if font_size is not None else "8.5pt"
-    else:  # atk (Standard: 3 Spalten, Initial)
+    else:  # atk (3 Spalten, Initial, 8pt)
         final_columns = columns if columns is not None else 3
         final_initial = use_initial if use_initial is not None else True
         final_gutter = gutter if gutter is not None else "4.8mm"
@@ -1681,12 +1681,12 @@ def main():
     RESET = "\033[0m"
 
     fmt_help = (
-        f"Format: {BLUE}atk{RESET} (Artikel, 3 Spalten, Initial, DIN-A4), "
+        f"Format: {BLUE}br2{RESET} (Bericht, 2 Spalten, DIN-A4; Standard), "
         f"{BLUE}br1{RESET} (Bericht, 1 Spalte, DIN-A4), "
-        f"{BLUE}br2{RESET} (Bericht, 2 Spalten, DIN-A4), "
+        f"{BLUE}atk{RESET} (Artikel, 3 Spalten, Initial, DIN-A4), "
         f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter)"
     )
-    size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; entfällt bei apa)"
+    size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 11pt bei br2; entfällt bei apa)"
 
     parser = argparse.ArgumentParser(
         prog="txt2pdf",
@@ -1695,7 +1695,7 @@ def main():
         add_help=False
     )
     parser.add_argument("-h", action="help", help="Hilfe anzeigen")
-    parser.add_argument("-f", dest="format_preset", metavar="FORMAT", default="atk", help=fmt_help)
+    parser.add_argument("-f", dest="format_preset", metavar="FORMAT", default="br2", help=fmt_help)
     parser.add_argument("-s", dest="size", metavar="GRÖßE", default=None, help=size_help)
     img_help = f"Abbildung einbetten ({BLUE}##Pfad/zur/Datei{RESET} in .txt/.md an gewünschter Stelle; .png/.jpg/.jpeg/.webp/.pdf)"
     parser.add_argument("-i", dest="images", metavar="BILD", action="append", default=[], help=img_help)
@@ -1713,7 +1713,7 @@ def main():
     final_author = args.author
     final_date = args.date
     all_images = args.images or []
-    fmt = (args.format_preset or "artikel").lower().strip()
+    fmt = (args.format_preset or "br2").lower().strip()
     final_font_size = args.size if fmt != "apa" else None
 
     success = convert_txt_to_pdf(
