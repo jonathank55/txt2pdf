@@ -209,26 +209,13 @@ def is_author_name(candidate: str) -> bool:
     return True
 
 def parse_title_author_from_filename(base_name: str) -> Tuple[Optional[str], Optional[str]]:
-    """Extrahiert Titel und Autor deterministisch aus dem Dateinamen."""
+    """Extrahiert Titel und Autor deterministisch aus dem Dateinamen unter strikter Bewahrung aller Titel-Trennzeichen."""
     doc_prefixes = {
         "artikel", "aufsatz", "bericht", "essay", "notiz", "notizen", "entwurf", "text", 
         "dokument", "paper", "report", "draft", "article", "kolumne", "kommentar", "manuskript"
     }
-    parts = [p.strip() for p in re.split(r"\s*[:|]\s*|\s+[-–—]\s+", base_name) if p.strip()]
-    if len(parts) >= 2:
-        if parts[0].lower() in doc_prefixes and len(parts) > 2:
-            parts = parts[1:]
-        if is_author_name(parts[-1]):
-            author_cand = parts[-1]
-            title_cand = " : ".join(parts[:-1])
-            if title_cand.lower() in doc_prefixes:
-                title_cand = ""
-            return (title_cand or None), author_cand
-        if is_author_name(parts[0]) and parts[0].lower() not in doc_prefixes:
-            author_cand = parts[0]
-            title_cand = " : ".join(parts[1:])
-            return (title_cand or None), author_cand
 
+    # 1. Explizite Trennung über Schlüsselwörter: Titel, von Autor / Titel by Autor
     m = re.search(r"^(.*?)\s*(?:,\s*)?\b(?:von|by|autor|author)\b\s*(.+)$", base_name, re.IGNORECASE)
     if m:
         c1 = m.group(1).strip()
@@ -237,6 +224,27 @@ def parse_title_author_from_filename(base_name: str) -> Tuple[Optional[str], Opt
             return c1, c2
         if is_author_name(c1):
             return c2, c1
+
+    # 2. Autor am Ende: Titel [Trenner] Autor (gierig nach dem letzten Trenner vor dem Autor suchen)
+    m_end = re.search(r"^(.*)\s*(?:[:|]|\s+[-–—]\s+)\s*([^:|]+)$", base_name)
+    if m_end:
+        t_cand = m_end.group(1).strip()
+        a_cand = m_end.group(2).strip()
+        if is_author_name(a_cand):
+            # Bereinige führendes Dokumenttyp-Präfix, falls vorhanden
+            m_p = re.match(r"^(?:artikel|aufsatz|bericht|essay|notizen?|entwurf|text|dokument|paper|report|draft|article|kolumne|kommentar|manuskript)\s*[:|]\s*(.+)$", t_cand, re.IGNORECASE)
+            if m_p:
+                t_cand = m_p.group(1).strip()
+            return (t_cand or None), a_cand
+
+    # 3. Autor am Anfang: Autor [Trenner] Titel
+    m_start = re.search(r"^([^:|]+)\s*(?:[:|]|\s+[-–—]\s+)\s*(.*?)$", base_name)
+    if m_start:
+        a_cand = m_start.group(1).strip()
+        t_cand = m_start.group(2).strip()
+        if is_author_name(a_cand) and a_cand.lower() not in doc_prefixes:
+            return (t_cand or None), a_cand
+
     return None, None
 
 def is_matching_title(candidate: str, target: str) -> bool:
