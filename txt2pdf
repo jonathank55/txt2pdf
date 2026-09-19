@@ -1618,16 +1618,16 @@ def convert_txt_to_pdf(
             open_preview=open_preview
         )
 
-    if fmt == "br2":  # Standard: 2 Spalten, 11pt Textgröße
+    if fmt == "br2":  # Standard: 2 Spalten, 12pt Textgröße
         final_columns = columns if columns is not None else 2
         final_initial = use_initial if use_initial is not None else False
         final_gutter = gutter if gutter is not None else "5.2mm"
-        final_font_size = font_size if font_size is not None else "11pt"
+        final_font_size = font_size if font_size is not None else "12pt"
     elif fmt == "br1":
         final_columns = columns if columns is not None else 1
         final_initial = use_initial if use_initial is not None else False
         final_gutter = gutter if gutter is not None else "0mm"
-        final_font_size = font_size if font_size is not None else "9pt"
+        final_font_size = font_size if font_size is not None else "12pt"
     else:  # atk (3 Spalten, Initial, 8pt)
         final_columns = columns if columns is not None else 3
         final_initial = use_initial if use_initial is not None else True
@@ -1863,7 +1863,7 @@ def main():
         f"{BLUE}atk{RESET} (Artikel, 3 Spalten, Initial, DIN-A4), "
         f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter)"
     )
-    size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 11pt bei br2; entfällt bei apa)"
+    size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 12pt bei br2/br1; entfällt bei apa)"
 
     parser = argparse.ArgumentParser(
         prog="txt2pdf",
