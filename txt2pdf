@@ -81,6 +81,16 @@ def format_content_to_typst(text: str) -> str:
     text = re.sub(r'\[([^\]]+)\]\((https?://[^\s\)]+)\)', save_md_link, text)
     text = re.sub(r'https?://[^\s<>"\'\[\]]+', save_bare_url, text)
 
+    def save_bare_doi(m):
+        prefix = m.group(1)
+        doi_val = m.group(2).rstrip('.,;:)"\'')
+        trailing = m.group(2)[len(doi_val):]
+        idx = len(links)
+        links.append(f'{escape_typst_line(prefix)}#link("https://doi.org/{doi_val}")[https://doi.org/{doi_val}]')
+        return f'TYPSTPLCHLDRLINK{idx}END{trailing}'
+
+    text = re.sub(r'\b(doi:\s*)(10\.\d{4,9}/[^\s<>"\'\[\]]+)', save_bare_doi, text, flags=re.I)
+
     # 2. Fettung schützen (**bold** und __bold__)
     strongs = []
     def save_strong(m):
@@ -339,22 +349,36 @@ def resolve_apa_citation(url: str) -> Dict[str, str]:
         "formatted": formatted
     }
 
-def generate_bibliography_typst(urls: List[str], font_spec: str = '("PT Serif", "EB Garamond", "Times New Roman", "Times")', font_size: str = "8pt", title_size: str = "12pt") -> str:
-    """Erzeugt das vollständige APA-Literaturverzeichnis als einspaltige Extraseite."""
-    if not urls:
-        return ""
-
-    citations = []
-    for u in urls:
-        cit = resolve_apa_citation(u)
-        if cit:
-            citations.append(cit)
-
-    citations.sort(key=lambda c: c["sort_key"])
-
+def generate_bibliography_typst(
+    urls: List[str] = None,
+    explicit_entries: List[str] = None,
+    bib_title: str = "Literaturverzeichnis",
+    font_spec: str = '("PT Serif", "EB Garamond", "Times New Roman", "Times")',
+    font_size: str = "8pt",
+    title_size: str = "10pt"
+) -> str:
+    """Erzeugt das standardkonforme APA-Literaturverzeichnis als einspaltige, linksbündige Extraseite mit anklickbaren Links."""
     entries_typst = []
-    for c in citations:
-        entries_typst.append(f"#block(inset: (bottom: 4mm))[\n  {c['formatted']}\n]")
+
+    if explicit_entries:
+        for entry in explicit_entries:
+            clean_entry = entry.strip()
+            if clean_entry:
+                entries_typst.append(f"#block(inset: (bottom: 3.5mm))[\n  {clean_entry}\n]")
+    elif urls:
+        citations = []
+        for u in urls:
+            cit = resolve_apa_citation(u)
+            if cit:
+                citations.append(cit)
+
+        citations.sort(key=lambda c: c["sort_key"])
+
+        for c in citations:
+            entries_typst.append(f"#block(inset: (bottom: 3.5mm))[\n  {c['formatted']}\n]")
+
+    if not entries_typst:
+        return ""
 
     body = "\n".join(entries_typst)
 
@@ -363,18 +387,18 @@ def generate_bibliography_typst(urls: List[str], font_spec: str = '("PT Serif", 
 #set page(columns: 1, margin: (x: 16mm, top: 22mm, bottom: 18mm))
 #align(left)[
   #v(1.5mm)
-  #text(size: {title_size}, weight: "bold", fill: rgb("#111111"))[Literaturverzeichnis]
+  #text(size: {title_size}, weight: "bold", fill: rgb("#111111"))[{escape_typst_line(bib_title)}]
   #v(1.2mm)
   #line(length: 100%, stroke: 0.5pt + rgb("#333333"))
   #v(3mm)
 ]
 
+#set text(font: {font_spec}, size: {font_size})
 #set par(
   hanging-indent: 12.7mm,
   leading: 0.65em,
   justify: false
 )
-#set text(font: {font_spec}, size: {font_size})
 
 {body}
 """
@@ -402,8 +426,8 @@ def format_figure_typst(img_path: str, caption_title: str = "", source: str = ""
         f"]\n#v(2.5mm)\n"
     )
 
-def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str = "6pt", use_initial: bool = True, doc_dir: str = "", hanging_indent: str = "6mm") -> Tuple[str, List[str], bool]:
-    """Wandelt Textzeilen in Typst-Code um, verarbeitet Überschriften, APA-Zitate deterministisch und extrahiert Links."""
+def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str = "6pt", use_initial: bool = True, doc_dir: str = "", hanging_indent: str = "6mm") -> Tuple[str, List[str], List[str], str]:
+    """Wandelt Textzeilen in Typst-Code um, verarbeitet Überschriften, trennt APA-Zitate für die Extraseite und extrahiert Links."""
     full_raw_text = "\n".join(raw_lines)
     all_urls = extract_urls_from_text(full_raw_text)
 
@@ -424,6 +448,8 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
 
     image_extensions = (".png", ".jpg", ".jpeg", ".webp", ".pdf", ".gif", ".svg", ".tiff", ".tif")
     typst_elements = []
+    explicit_bib_entries = []
+    bib_heading_title = "Literaturverzeichnis"
     first_body_para_done = False
     in_bibliography_section = False
     has_explicit_bibliography = False
@@ -539,18 +565,19 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         if bib_header_regex.match(flat_text):
             in_bibliography_section = True
             has_explicit_bibliography = True
-            h_text = escape_typst_line(flat_text)
-            top_v = "#v(3.0mm)\n" if typst_elements else ""
-            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#111111\"))[{h_text}]\n#v(1.2mm)\n")
+            raw_title_clean = flat_text.rstrip(":").strip()
+            if raw_title_clean.isupper() and len(raw_title_clean) > 3:
+                bib_heading_title = raw_title_clean.capitalize()
+            elif raw_title_clean:
+                bib_heading_title = raw_title_clean
             continue
 
-        # 7. APA-Zitate / Literaturangaben (mit standardisiertem hängenden Einzug)
+        # 7. APA-Zitate / Literaturangaben (werden isoliert für die Extraseite gesammelt)
         if in_bibliography_section or is_apa_citation(flat_text):
+            in_bibliography_section = True
             has_explicit_bibliography = True
             escaped_cite = format_content_to_typst(flat_text)
-            typst_elements.append(
-                f"#block(spacing: 2.2mm)[\n  #set par(hanging-indent: {hanging_indent}, justify: true)\n  {escaped_cite}\n]\n"
-            )
+            explicit_bib_entries.append(escaped_cite)
             continue
 
         # 8. Versalien-Überschriften (ALL CAPS / Großbuchstaben)
@@ -595,7 +622,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             if os.path.exists(img_p):
                 typst_elements.append(format_figure_typst(img_p, caption_size=caption_size))
 
-    return "\n".join(typst_elements), all_urls, has_explicit_bibliography
+    return "\n".join(typst_elements), all_urls, explicit_bib_entries, bib_heading_title
 
 DATE_PATTERNS = [
     r"^(?:Datum|Date):\s*(.+)$",
@@ -826,7 +853,7 @@ class RTFHTMLToTypstParser(HTMLParser):
         else:
             self.curr_buf.append(t)
 
-def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_author: str = None, expected_date: str = None, images: list = None, caption_size: str = "6pt", title_size: str = "10pt", use_initial: bool = True, hanging_indent: str = "6mm") -> Tuple[str, List[str], str, str, str, bool]:
+def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_author: str = None, expected_date: str = None, images: list = None, caption_size: str = "6pt", title_size: str = "10pt", use_initial: bool = True, hanging_indent: str = "6mm") -> Tuple[str, List[str], str, str, str, List[str], str]:
     """Konvertiert eine RTF- oder RTFD-Datei via textutil deterministisch unter vollständiger Wahrung der Formatierung."""
     res = subprocess.run(
         ["/usr/bin/textutil", "-convert", "html", rtf_path, "-stdout"],
@@ -870,6 +897,8 @@ def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_autho
 
     typst_blocks = []
     plain_paragraphs = []
+    rtf_bib_entries = []
+    bib_heading_title = "Literaturverzeichnis"
     first_body_para_done = False
     in_bib_section = False
     has_explicit_bib = False
@@ -899,12 +928,17 @@ def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_autho
         if bib_header_regex.match(p_plain_clean):
             in_bib_section = True
             has_explicit_bib = True
-            typst_blocks.append(f"#v(2.8mm)\n#strong[{content}]\n#v(1.2mm)")
+            raw_title_clean = p_plain_clean.rstrip(":").strip()
+            if raw_title_clean.isupper() and len(raw_title_clean) > 3:
+                bib_heading_title = raw_title_clean.capitalize()
+            elif raw_title_clean:
+                bib_heading_title = raw_title_clean
             continue
 
         if in_bib_section or is_apa_citation(p_plain_clean):
+            in_bib_section = True
             has_explicit_bib = True
-            typst_blocks.append(f"#block(spacing: 2.2mm)[\n  #set par(hanging-indent: {hanging_indent}, justify: true)\n  {content}\n]")
+            rtf_bib_entries.append(content)
             continue
 
         # Zitate in Anführungszeichen immer normal zentrieren
@@ -967,7 +1001,7 @@ def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_autho
             seen_urls.add(u)
             unique_urls.append(u)
 
-    return "\n\n".join(typst_blocks), unique_urls, extracted_title, extracted_author, extracted_date, has_explicit_bib
+    return "\n\n".join(typst_blocks), unique_urls, extracted_title, extracted_author, extracted_date, rtf_bib_entries, bib_heading_title
 
 def clean_title_and_author(title: str, author: str = None, fallback_author: str = None):
     """Bereinigt Titel und Autor deterministisch von redundanten Namensdopplungen."""
@@ -1181,7 +1215,8 @@ def convert_txt_to_apa_standalone(
     course_line = f"  #text()[{escape_typst_line(course)}]\n" if course else ""
     inst_line = f"  #text()[{escape_typst_line(instructor)}]\n" if instructor else ""
 
-    typst_apa = f"""#set page(
+    typst_apa = f"""#show link: set text(fill: rgb("#0b57d0"))
+#set page(
   paper: "us-letter",
   margin: (x: 25.4mm, top: 25.4mm, bottom: 25.4mm),
   header: context [
@@ -1352,7 +1387,7 @@ def convert_txt_to_pdf(
     hanging_indent = "12.7mm" if final_columns == 1 else "6mm"
 
     if is_rtf:
-        body_text, urls, rtf_title, rtf_author, rtf_date, has_explicit_bib = parse_rtf_to_typst(
+        body_text, urls, rtf_title, rtf_author, rtf_date, explicit_bib_entries, bib_heading_title = parse_rtf_to_typst(
             abs_input,
             expected_title=title or file_title_candidate,
             expected_author=author or file_author_candidate,
@@ -1372,7 +1407,7 @@ def convert_txt_to_pdf(
 
         doc_dir = os.path.dirname(abs_input)
         extracted_title, extracted_author, extracted_date, body_lines = extract_metadata_and_body(raw_content, default_author=author, default_date=date)
-        body_text, urls, has_explicit_bib = parse_body_to_typst(body_lines, images=images, caption_size=caption_size, use_initial=final_initial, doc_dir=doc_dir, hanging_indent=hanging_indent)
+        body_text, urls, explicit_bib_entries, bib_heading_title = parse_body_to_typst(body_lines, images=images, caption_size=caption_size, use_initial=final_initial, doc_dir=doc_dir, hanging_indent=hanging_indent)
 
     raw_title = title if title else (extracted_title if extracted_title else (file_title_candidate if file_title_candidate else base_name))
     target_author = author if author else (extracted_author if extracted_author else file_author_candidate)
@@ -1394,10 +1429,17 @@ def convert_txt_to_pdf(
     else:
         font_spec = '("PT Serif", "EB Garamond", "Times New Roman", "Times")'
 
-    if has_explicit_bib:
-        bibliography_typst = ""
-    else:
-        bibliography_typst = generate_bibliography_typst(urls, font_spec=font_spec, font_size=final_font_size, title_size=title_size)
+    default_bib_title = "References" if lang == "en" else "Literaturverzeichnis"
+    final_bib_title = bib_heading_title if bib_heading_title else default_bib_title
+
+    bibliography_typst = generate_bibliography_typst(
+        urls=urls,
+        explicit_entries=explicit_bib_entries,
+        bib_title=final_bib_title,
+        font_spec=font_spec,
+        font_size=final_font_size,
+        title_size=title_size
+    )
 
     author_block = ""
     if doc_author:
@@ -1451,6 +1493,8 @@ def convert_txt_to_pdf(
     # Druckbare DIN-A4-Geometrie: 16 mm Außenränder, 22 mm oberer Rand (mit 8 mm Header-Offset), 18 mm unterer Rand
     # Seitennummern nur bei mehrseitigen Dokumenten (total_pages > 1)
     typst_template = f"""#import "@preview/droplet:0.3.1": dropcap
+
+#show link: set text(fill: rgb("#0b57d0"))
 
 #set page(
   paper: "a4",
