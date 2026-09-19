@@ -119,6 +119,77 @@ def apply_initial_to_typst_element(content: str) -> str:
         return s
     return f"#dropcap(\n  height: 3,\n  gap: 2pt,\n  justify: true,\n)[{s}]"
 
+def is_author_name(candidate: str) -> bool:
+    """Prüft zuverlässig, ob eine Zeichenkette den Namen einer realen Person / Autors darstellt."""
+    s = candidate.strip()
+    if not s or len(s) < 3 or len(s) > 60:
+        return False
+    if s.endswith((".", "!", "?", ";", ":", ",")):
+        if not re.search(r"\b[A-ZÄÖÜ]\.$", s):
+            return False
+    if s.startswith(("-", "–", "—", "#", "*", ">", "•")):
+        return False
+    m_pref = re.match(r"^(?:autor|author|von|by|verfasser|written\s+by)\s*[:\-–—]?\s*(.+)$", s, re.IGNORECASE)
+    if m_pref:
+        s = m_pref.group(1).strip()
+
+    title_pattern = r"^(?:(?:Dr\.|Prof\.|Prof\. Dr\.|PD|PhD|M\.A\.|B\.A\.|M\.Sc\.|B\.Sc\.)\s+)*"
+    suffix_pattern = r"(?:,\s*(?:Ph\.?D\.?|M\.?A\.?|M\.?Sc\.?|B\.?A\.?|B\.?Sc\.?|LL\.?M\.?|CFA|MD|MBA))?$"
+    s_clean = re.sub(title_pattern, "", s, flags=re.IGNORECASE)
+    s_clean = re.sub(suffix_pattern, "", s_clean, flags=re.IGNORECASE).strip()
+
+    stopwords = {
+        "der", "die", "das", "den", "dem", "des", "ein", "eine", "einer", "eines", "einem", "einen",
+        "und", "oder", "aber", "denn", "weil", "dass", "wenn", "ob", "wie", "als",
+        "im", "in", "am", "an", "auf", "aus", "bei", "mit", "nach", "von", "zu", "zum", "zur", "über", "unter", "vor", "durch", "für",
+        "ist", "sind", "war", "waren", "wird", "werden", "hat", "haben", "hatte", "hatten", "kann", "können", "muss", "müssen",
+        "kapitel", "chapter", "abschnitt", "section", "inhalt", "literatur", "literaturverzeichnis", "references", "quellen",
+        "zusammenfassung", "abstract", "einleitung", "introduction", "fazit", "schluss", "anhang", "tabelle", "abbildung",
+        "the", "a", "an", "and", "or", "but", "of", "for", "with", "from", "into", "is", "are", "was", "were"
+    }
+
+    words = re.findall(r"[A-Za-zÄÖÜäöüß]+(?:-[A-Za-zÄÖÜäöüß]+)?|\b[A-ZÄÖÜ]\.", s_clean)
+    if not (1 <= len(words) <= 5):
+        return False
+
+    for w in words:
+        if w.lower() in stopwords:
+            return False
+        if not (w[0].isupper() or w.lower() in ("von", "van", "de", "der", "zu")):
+            return False
+
+    return True
+
+def parse_title_author_from_filename(base_name: str) -> Tuple[Optional[str], Optional[str]]:
+    """Extrahiert Titel und Autor aus dem Dateinamen unter Berücksichtigung verschiedener Trennzeichen."""
+    m = re.search(r"^(.*?)\s*(?:[:|]|\s[-–—]\s|(?:,\s*)?\b(?:von|by|autor|author)\b)\s*(.+)$", base_name, re.IGNORECASE)
+    if m:
+        c1 = m.group(1).strip()
+        c2 = m.group(2).strip()
+        if is_author_name(c2):
+            return c1, c2
+        if is_author_name(c1):
+            return c2, c1
+    return None, None
+
+def is_apa_citation(text: str) -> bool:
+    """Erkennt deterministisch, ob ein Absatz einen normgerechten APA-Quellennachweis darstellt."""
+    s = text.strip()
+    if len(s) < 20:
+        return False
+    m_yr = re.search(r"\(\s*(?:(?:19|20)\d{2}|n\.d\.|o\.\s*D\.)(?:,\s*[^)]+)?\s*\)", s)
+    if not m_yr:
+        return False
+    prefix = s[:m_yr.start()].strip()
+    if not prefix or len(prefix) > 150:
+        return False
+    if any(k in s for k in ("http://", "https://", "doi.org", "doi:", "S.", "pp.", "Vol.", "Nr.", "Issue")):
+        return True
+    after = s[m_yr.end():].strip()
+    if after.startswith((".", ":")):
+        return True
+    return False
+
 def clean_url_string(raw_u: str) -> str:
     """Bereinigt URLs unter Beibehaltung balancierter Klammern in DOIs und Pfaden."""
     u = raw_u.strip().rstrip('.,;:>"\'')
@@ -331,29 +402,15 @@ def format_figure_typst(img_path: str, caption_title: str = "", source: str = ""
         f"]\n#v(2.5mm)\n"
     )
 
-def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str = "6pt", use_initial: bool = True, doc_dir: str = "") -> Tuple[str, List[str]]:
-    """Wandelt Textzeilen in Typst-Code um, verarbeitet Inline-Bilder (##Pfad) deterministisch und extrahiert Links."""
+def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str = "6pt", use_initial: bool = True, doc_dir: str = "", hanging_indent: str = "6mm") -> Tuple[str, List[str], bool]:
+    """Wandelt Textzeilen in Typst-Code um, verarbeitet Überschriften, APA-Zitate deterministisch und extrahiert Links."""
     full_raw_text = "\n".join(raw_lines)
     all_urls = extract_urls_from_text(full_raw_text)
-
-    pruned_lines = []
-    in_sources_block = False
-    for line in raw_lines:
-        s = line.strip()
-        if re.match(r"^(?:Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis):?\s*$", s, re.I):
-            in_sources_block = True
-            continue
-        if in_sources_block:
-            if not s or s.startswith(("-", "*", "•", "http", "[")):
-                continue
-            else:
-                in_sources_block = False
-        pruned_lines.append(line)
 
     paragraphs = []
     current_lines = []
 
-    for line in pruned_lines:
+    for line in raw_lines:
         s = line.strip()
         if not s:
             if current_lines:
@@ -368,6 +425,9 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
     image_extensions = (".png", ".jpg", ".jpeg", ".webp", ".pdf", ".gif", ".svg", ".tiff", ".tif")
     typst_elements = []
     first_body_para_done = False
+    in_bibliography_section = False
+    has_explicit_bibliography = False
+
     chapter_header_regex = re.compile(
         r"^(?:KAPITEL|Kapitel|CHAPTER|Chapter|ABSCHNITT|Abschnitt|SECTION|Section|TEIL|Teil|MODUL|Modul|LEKTION|Lektion|THEMA|Thema|EINHEIT|Einheit)\s+([0-9IVXLCDM]+|[A-Z])(?:\s*[:\-\.\–—]\s*(.*)|$)",
         re.IGNORECASE
@@ -375,17 +435,17 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
     numbered_header_regex = re.compile(r"^(\d+(?:\.\d+)*[\.:\)]\s+[A-ZÄÖÜ].*)$")
     roman_header_regex = re.compile(r"^([IVXLCDM]+[\.:\)]\s+[A-ZÄÖÜ].*)$")
     alpha_header_regex = re.compile(r"^([A-Z]\.\s+[A-ZÄÖÜ].*)$")
+    bib_header_regex = re.compile(r"^(?:Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography):?\s*$", re.IGNORECASE)
 
     for i, para in enumerate(paragraphs):
         lines_in_para = para.splitlines()
         first_line = lines_in_para[0].strip()
-        flat_text = " ".join(l.strip() for l in lines_in_para)
+        flat_text = " ".join(l.strip() for l in lines_in_para).strip()
         is_single_line = (len(lines_in_para) == 1)
 
         # 0. Explizite Inline-Abbildung: ##Pfad/zur/Datei
         if is_single_line and first_line.startswith("##") and not first_line.startswith("###"):
             target_str = first_line[2:].strip()
-            # Wenn es wie ein Bildpfad aussieht oder auf der Festplatte existiert
             target_clean = target_str.strip("\"'")
             resolved_img = None
             if os.path.isabs(target_clean) and os.path.exists(target_clean):
@@ -393,7 +453,6 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             elif doc_dir and os.path.exists(os.path.join(doc_dir, target_clean)):
                 resolved_img = os.path.join(doc_dir, target_clean)
             elif any(target_clean.lower().endswith(ext) for ext in image_extensions):
-                # Wenn Endung ein Bild ist, auch wenn Pfad relativ/absolut
                 resolved_img = target_clean
 
             if resolved_img:
@@ -410,17 +469,6 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                 (flat_text.startswith("“") and flat_text.endswith("”"))
             )
         )
-
-        # 1. Zitat-Zwischenüberschriften (8pt, fett, zentriert)
-        is_quote_heading = (
-            len(flat_text) <= 280 and (
-                (flat_text.startswith("»") and flat_text.endswith("«")) or
-                (flat_text.startswith("„") and flat_text.endswith("“")) or
-                (flat_text.startswith('"') and flat_text.endswith('"')) or
-                (flat_text.startswith("“") and flat_text.endswith("”"))
-            )
-        )
-
         if is_quote_heading:
             escaped = format_content_to_typst(flat_text)
             top_v = "#v(2.2mm)\n" if typst_elements else ""
@@ -487,37 +535,54 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#111111\"))[{h_text}]\n#v(0.8mm)\n")
             continue
 
-        # 6. Versalien-Überschriften (ALL CAPS / Großbuchstaben)
-        # Gilt für einzeilige Blöcke mit Großbuchstaben, bis zu 160 Zeichen / 20 Wörter
-        alpha_chars = re.findall(r"[A-Za-zÄÖÜäöüß]", first_line)
-        is_all_caps = is_single_line and len(alpha_chars) >= 3 and first_line.isupper() and len(first_line) <= 160 and len(first_line.split()) <= 20
+        # 6. Literaturverzeichnis-Abschnittsüberschrift
+        if bib_header_regex.match(flat_text):
+            in_bibliography_section = True
+            has_explicit_bibliography = True
+            h_text = escape_typst_line(flat_text)
+            top_v = "#v(3.0mm)\n" if typst_elements else ""
+            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#111111\"))[{h_text}]\n#v(1.2mm)\n")
+            continue
+
+        # 7. APA-Zitate / Literaturangaben (mit standardisiertem hängenden Einzug)
+        if in_bibliography_section or is_apa_citation(flat_text):
+            has_explicit_bibliography = True
+            escaped_cite = format_content_to_typst(flat_text)
+            typst_elements.append(
+                f"#block(spacing: 2.2mm)[\n  #set par(hanging-indent: {hanging_indent}, justify: true)\n  {escaped_cite}\n]\n"
+            )
+            continue
+
+        # 8. Versalien-Überschriften (ALL CAPS / Großbuchstaben)
+        alpha_chars = re.findall(r"[A-Za-zÄÖÜäöüß]", flat_text)
+        is_all_caps = len(alpha_chars) >= 3 and flat_text.isupper() and len(flat_text) <= 200 and len(flat_text.split()) <= 20
         if is_all_caps:
-            h_text = escape_typst_line(first_line)
+            h_text = escape_typst_line(flat_text)
             top_v = "#v(2.4mm)\n" if typst_elements else ""
             typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#111111\"))[{h_text}]\n#v(0.8mm)\n")
             continue
 
-        # 7. Isolierte Sätze / Zwischenüberschriften / Lead-Sätze (einzeilige Blöcke bis 250 Zeichen, die kein Zitat sind)
-        # Wenn es einen isolierten Satz gibt, der kein Zitat ist, wird er als Überschrift / Zwischenüberschrift formatiert
-        is_isolated_sentence_heading = (
-            is_single_line and
-            len(first_line) <= 250 and
-            not any(first_line.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "weil ", "dass ", "wenn ", "obwohl ", "währenddessen "])
-        )
-        if is_isolated_sentence_heading:
-            h_text = format_content_to_typst(first_line)
-            top_v = "#v(2.2mm)\n" if typst_elements else ""
-            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#111111\"))[{h_text}]\n#v(0.8mm)\n")
-            continue
-
-        # 8. Aufzählungspunkte
+        # 9. Aufzählungspunkte
         if first_line.startswith(("- ", "* ", "• ")):
             for l in lines_in_para:
                 item_text = format_content_to_typst(re.sub(r"^[-*•]\s+", "", l.strip()))
                 typst_elements.append(f"- {item_text}\n")
             continue
 
-        # 10. Regulärer Fließtextabsatz (Standard mit optionalem Initial im 1. Absatz)
+        # 10. Nutzerregel: Ein Satz ohne Punkt am Ende, von anderen Absätzen getrennt, ist eine Überschrift
+        is_heading_by_rule = (
+            not flat_text.endswith((".", "...", ";")) and
+            len(flat_text) <= 300 and
+            len(lines_in_para) <= 3 and
+            not any(flat_text.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "weil ", "dass ", "wenn ", "obwohl ", "währenddessen "])
+        )
+        if is_heading_by_rule:
+            h_text = format_content_to_typst(flat_text)
+            top_v = "#v(2.4mm)\n" if typst_elements else ""
+            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#111111\"))[{h_text}]\n#v(0.8mm)\n")
+            continue
+
+        # 11. Regulärer Fließtextabsatz (Standard mit optionalem Initial im 1. Absatz)
         escaped_para = format_content_to_typst(flat_text)
         if use_initial and not first_body_para_done:
             escaped_para = apply_initial_to_typst_element(escaped_para)
@@ -530,7 +595,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             if os.path.exists(img_p):
                 typst_elements.append(format_figure_typst(img_p, caption_size=caption_size))
 
-    return "\n".join(typst_elements), all_urls
+    return "\n".join(typst_elements), all_urls, has_explicit_bibliography
 
 DATE_PATTERNS = [
     r"^(?:Datum|Date):\s*(.+)$",
@@ -761,7 +826,7 @@ class RTFHTMLToTypstParser(HTMLParser):
         else:
             self.curr_buf.append(t)
 
-def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_author: str = None, expected_date: str = None, images: list = None, caption_size: str = "6pt", title_size: str = "10pt", use_initial: bool = True) -> Tuple[str, List[str], str, str, str]:
+def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_author: str = None, expected_date: str = None, images: list = None, caption_size: str = "6pt", title_size: str = "10pt", use_initial: bool = True, hanging_indent: str = "6mm") -> Tuple[str, List[str], str, str, str, bool]:
     """Konvertiert eine RTF- oder RTFD-Datei via textutil deterministisch unter vollständiger Wahrung der Formatierung."""
     res = subprocess.run(
         ["/usr/bin/textutil", "-convert", "html", rtf_path, "-stdout"],
@@ -792,12 +857,12 @@ def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_autho
             if not extracted_title:
                 extracted_title = p_plain
             break
-        if idx == 0 and len(p_plain) <= 180 and not p_plain.endswith((".", "!", "?", ";", ":")):
+        if idx == 0 and len(p_plain) <= 350 and not p_plain.endswith((".", "!", "?", ";", ":")):
             title_idx = idx
             if not extracted_title:
                 extracted_title = p_plain
             break
-        if p.get('heading') or (p_plain.isupper() and len(re.findall(r"[A-Za-zÄÖÜäöüß]", p_plain)) >= 3 and len(p_plain) <= 160):
+        if p.get('heading') or (p_plain.isupper() and len(re.findall(r"[A-Za-zÄÖÜäöüß]", p_plain)) >= 3 and len(p_plain) <= 200):
             title_idx = idx
             if not extracted_title:
                 extracted_title = p_plain
@@ -806,12 +871,16 @@ def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_autho
     typst_blocks = []
     plain_paragraphs = []
     first_body_para_done = False
+    in_bib_section = False
+    has_explicit_bib = False
+    bib_header_regex = re.compile(r"^(?:Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography):?\s*$", re.IGNORECASE)
+
     for idx, p in enumerate(paras):
-        content = p['typst']
+        content = re.sub(r'\](?=\()', r']\\', p['typst'])
+        p_plain_clean = p['plain'].strip()
         plain_paragraphs.append(p['plain'])
 
         if idx == title_idx:
-            # Titel automatisch ganz normal zentrieren, 2pt größer als der Rest und fett
             t_content = content
             if t_content.startswith("#strong[") and t_content.endswith("]"):
                 t_inner = t_content[8:-1]
@@ -820,12 +889,25 @@ def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_autho
             typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    #text(size: {title_size}, weight: \"bold\", fill: rgb(\"#111111\"))[{t_inner}]\n  ]\n]\n#v(1.2mm)")
             continue
 
-        if idx == title_idx + 1 and (p.get('align') == 'center' or p['plain'].strip() == extracted_author or bool(re.match(r"^(?:autor|author|von|by):\s*", p['plain'], re.I))):
+        if idx == title_idx + 1 and (is_author_name(p_plain_clean) or p.get('align') == 'center' or p_plain_clean == extracted_author or bool(re.match(r"^(?:autor|author|von|by):\s*", p_plain_clean, re.I))):
+            if not extracted_author:
+                extracted_author = p_plain_clean
             typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    {content}\n  ]\n]\n#v(1mm)")
             continue
 
+        # Literaturverzeichnis-Abschnitt
+        if bib_header_regex.match(p_plain_clean):
+            in_bib_section = True
+            has_explicit_bib = True
+            typst_blocks.append(f"#v(2.8mm)\n#strong[{content}]\n#v(1.2mm)")
+            continue
+
+        if in_bib_section or is_apa_citation(p_plain_clean):
+            has_explicit_bib = True
+            typst_blocks.append(f"#block(spacing: 2.2mm)[\n  #set par(hanging-indent: {hanging_indent}, justify: true)\n  {content}\n]")
+            continue
+
         # Zitate in Anführungszeichen immer normal zentrieren
-        p_plain_clean = p['plain'].strip()
         is_quote = (
             len(p_plain_clean) <= 350 and (
                 (p_plain_clean.startswith("»") and p_plain_clean.endswith("«")) or
@@ -841,17 +923,24 @@ def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_autho
             typst_blocks.append(f"#v(2.2mm)\n#align(center)[\n  #par(justify: false)[\n    #text(fill: rgb(\"#1a1a1a\"))[{t_content}]\n  ]\n]\n#v(2mm)")
             continue
 
-        # Fette Lead-Überschrift (z. B. fette Kernaussage nach Titel/Autor) oder explizite Überschriften
+        # Fette Lead-Überschrift oder explizite Überschriften
         t_trimmed = content.strip()
         is_fully_bold = t_trimmed.startswith("#strong[") and t_trimmed.endswith("]")
         is_lead_heading = (len(typst_blocks) <= 2) and is_fully_bold and len(p_plain_clean) <= 280
         is_section_heading = is_fully_bold and len(p_plain_clean) <= 160
 
+        # Nutzerregel: Ein Satz ohne Punkt am Ende, von anderen Absätzen getrennt, ist eine Überschrift
+        is_heading_by_rule = (
+            not p_plain_clean.endswith((".", "...", ";")) and
+            len(p_plain_clean) <= 300 and
+            not any(p_plain_clean.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "weil ", "dass ", "wenn ", "obwohl "])
+        )
+
         if p['align'] == 'center':
             typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    {content}\n  ]\n]")
         elif p['align'] == 'right':
             typst_blocks.append(f"#align(right)[\n  #par(justify: false)[\n    {content}\n  ]\n]")
-        elif p['heading'] or is_section_heading:
+        elif p['heading'] or is_section_heading or is_heading_by_rule:
             typst_blocks.append(f"#v(1.8mm)\n#strong[{content if not is_fully_bold else t_trimmed[8:-1]}]\n#v(0.8mm)")
         elif is_lead_heading:
             typst_blocks.append(f"#v(1.2mm)\n#strong[{t_trimmed[8:-1]}]\n#v(1.2mm)")
@@ -878,7 +967,7 @@ def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_autho
             seen_urls.add(u)
             unique_urls.append(u)
 
-    return "\n\n".join(typst_blocks), unique_urls, extracted_title, extracted_author, extracted_date
+    return "\n\n".join(typst_blocks), unique_urls, extracted_title, extracted_author, extracted_date, has_explicit_bib
 
 def clean_title_and_author(title: str, author: str = None, fallback_author: str = None):
     """Bereinigt Titel und Autor deterministisch von redundanten Namensdopplungen."""
@@ -896,13 +985,29 @@ def clean_title_and_author(title: str, author: str = None, fallback_author: str 
             r"[\s\-_–—|:]*(?:(?:von|by|autor|author)\s+)?[\s\-_–—|:]*" + re.escape(a) + r"\s*$",
             re.IGNORECASE
         )
-        cleaned_title = pat_end.sub("", cleaned_title)
+        if pat_end.search(cleaned_title):
+            if not final_author:
+                final_author = a
+            cleaned_title = pat_end.sub("", cleaned_title)
 
         pat_mid = re.compile(
             r"[\s\-_–—|:]+(?:(?:von|by|autor|author)\s+)?" + re.escape(a) + r"[\s\-_–—|:]+",
             re.IGNORECASE
         )
         cleaned_title = pat_mid.sub(" ", cleaned_title)
+
+    # Prüfe auch Trenner am Titelende nach unbekannten Autoren
+    m_sep = re.search(r"^(.*?)\s*(?:[:|]|\s[-–—]\s|(?:,\s*)?\b(?:von|by|autor|author)\b)\s*(.+)$", cleaned_title, re.IGNORECASE)
+    if m_sep:
+        t_cand, a_cand = m_sep.group(1).strip(), m_sep.group(2).strip()
+        if is_author_name(a_cand):
+            cleaned_title = t_cand
+            if not final_author:
+                final_author = a_cand
+        elif is_author_name(t_cand):
+            cleaned_title = a_cand
+            if not final_author:
+                final_author = t_cand
 
     cleaned_title = re.sub(r"[\s\-_–—|:]+$", "", cleaned_title).strip()
     if not cleaned_title:
@@ -911,7 +1016,7 @@ def clean_title_and_author(title: str, author: str = None, fallback_author: str 
     return cleaned_title, final_author
 
 def extract_metadata_and_body(raw_text: str, default_author: str = None, default_date: str = None):
-    """Trennt Dokumenttitel, Autor, Datum und den eigentlichen Textkörper."""
+    """Trennt Dokumenttitel, Autor, Datum und den eigentlichen Textkörper deterministisch."""
     lines = raw_text.splitlines()
     start_idx = 0
     while start_idx < len(lines) and not lines[start_idx].strip():
@@ -920,76 +1025,224 @@ def extract_metadata_and_body(raw_text: str, default_author: str = None, default
     extracted_title = None
     extracted_author = None
     extracted_date = default_date
-    body_start_idx = start_idx
+    curr_idx = start_idx
 
-    author_patterns = [
-        r"^(?:Autor|Author|Von|By):\s*(.+)$",
-        r"^(Jonathan Klatchko)$",
-        r"^(?:Yona Klatchko)$"
-    ]
     date_regexes = [re.compile(p, re.IGNORECASE) for p in DATE_PATTERNS]
 
-    if start_idx < len(lines):
-        first_line = lines[start_idx].strip()
-        if first_line.startswith("# "):
-            extracted_title = first_line[2:].strip()
-            body_start_idx = start_idx + 1
-        elif len(first_line) < 100 and not first_line.endswith((".", "!", "?")):
-            if not any(d_reg.match(first_line) for d_reg in date_regexes):
-                extracted_title = first_line
-                body_start_idx = start_idx + 1
+    # Untersuche die ersten nicht-leeren Zeilen im Dokumentkopf
+    while curr_idx < len(lines) and curr_idx < start_idx + 8:
+        line_s = lines[curr_idx].strip()
+        if not line_s:
+            curr_idx += 1
+            continue
 
-        for _ in range(4):
-            next_idx = body_start_idx
-            while next_idx < len(lines) and not lines[next_idx].strip():
-                next_idx += 1
+        # 1. Expliziter Markdown-Titel
+        if line_s.startswith("# ") and not extracted_title:
+            extracted_title = line_s[2:].strip()
+            curr_idx += 1
+            continue
 
-            if next_idx < len(lines):
-                candidate = lines[next_idx].strip()
-                matched = False
-                for pat in author_patterns:
-                    m = re.match(pat, candidate, re.IGNORECASE)
-                    if m:
-                        if not extracted_author:
-                            extracted_author = m.group(1).strip()
-                        body_start_idx = next_idx + 1
-                        matched = True
-                        break
-                if matched:
-                    continue
+        # 2. Expliziter Autor-Präfix
+        m_auth = re.match(r"^(?:Autor|Author|Von|By|Verfasser|Written\s+by):\s*(.+)$", line_s, re.IGNORECASE)
+        if m_auth:
+            if not extracted_author:
+                extracted_author = m_auth.group(1).strip()
+            curr_idx += 1
+            continue
 
-                for d_reg in date_regexes:
-                    m_d = d_reg.match(candidate)
-                    if m_d:
-                        if not extracted_date:
-                            extracted_date = m_d.group(1).strip() if m_d.groups() else candidate
-                        body_start_idx = next_idx + 1
-                        matched = True
-                        break
-                if matched:
-                    continue
-
-    clean_body_lines = []
-    skipped_header_lines = False
-    for i, line in enumerate(lines[body_start_idx:]):
-        s = line.strip()
-        if not skipped_header_lines and s:
-            is_auth = any(re.match(pat, s, re.IGNORECASE) for pat in author_patterns)
-            if is_auth:
-                if not extracted_author:
-                    extracted_author = s
-                continue
-            is_date = any(d_reg.match(s) for d_reg in date_regexes)
-            if is_date:
+        # 3. Datum
+        is_dt = False
+        for d_reg in date_regexes:
+            m_d = d_reg.match(line_s)
+            if m_d:
                 if not extracted_date:
-                    extracted_date = s
-                continue
-            skipped_header_lines = True
-        clean_body_lines.append(line)
+                    extracted_date = m_d.group(1).strip() if m_d.groups() else line_s
+                curr_idx += 1
+                is_dt = True
+                break
+        if is_dt:
+            continue
 
+        # 4. Autor ohne Präfix (z. B. "Jonathan Klatchko")
+        if is_author_name(line_s):
+            if not extracted_author:
+                extracted_author = line_s
+                curr_idx += 1
+                continue
+
+        # 5. Titel ohne Markdown-Syntax: Ein Satz ohne Punkt am Ende (bis zu 350 Zeichen)
+        if not extracted_title:
+            if len(line_s) <= 350 and not line_s.endswith((".", "!", "?")) and not line_s.startswith(("-", "*", "•", "##", ">")):
+                extracted_title = line_s
+                curr_idx += 1
+                continue
+
+        # Sobald eine Zeile weder Titel, Autor noch Datum ist, beginnt der eigentliche Fließtext
+        break
+
+    # Überspringe alle Leerzeilen nach dem Kopfbereich
+    while curr_idx < len(lines) and not lines[curr_idx].strip():
+        curr_idx += 1
+
+    clean_body_lines = lines[curr_idx:]
     final_author = extracted_author if extracted_author else default_author
     final_date = extracted_date if extracted_date else default_date
     return extracted_title, final_author, final_date, clean_body_lines
+
+def convert_txt_to_apa_standalone(
+    input_path: str,
+    output_path: str = None,
+    title: str = None,
+    author: str = None,
+    date: str = None,
+    institution: str = "California Lutheran University",
+    course: str = None,
+    instructor: str = None,
+    open_preview: bool = False
+) -> bool:
+    """Eigenständiger, vollautonomer Typst-Kompilierer für das APA 7th Edition Student Paper Format."""
+    abs_input = os.path.abspath(input_path)
+    base_name = os.path.splitext(os.path.basename(abs_input))[0]
+    if output_path is None:
+        abs_output = os.path.join(os.path.dirname(abs_input), f"{base_name}.pdf")
+    else:
+        abs_output = os.path.abspath(output_path)
+
+    os.makedirs(os.path.dirname(abs_output), exist_ok=True)
+
+    with open(abs_input, "r", encoding="utf-8", errors="replace") as f:
+        raw_content = f.read()
+
+    file_title, file_author = parse_title_author_from_filename(base_name)
+    ext_title, ext_author, ext_date, body_lines = extract_metadata_and_body(raw_content, default_author=author, default_date=date)
+
+    doc_title = title or ext_title or file_title or base_name
+    doc_author = author or ext_author or file_author or "Jonathan Klatchko"
+    doc_date = date or ext_date or time.strftime("%B %d, %Y")
+
+    doc_title, doc_author = clean_title_and_author(doc_title, doc_author, fallback_author=file_author)
+
+    paragraphs = []
+    cur = []
+    for l in body_lines:
+        s = l.strip()
+        if not s:
+            if cur:
+                paragraphs.append("\n".join(cur))
+                cur = []
+        else:
+            cur.append(s)
+    if cur:
+        paragraphs.append("\n".join(cur))
+
+    elements = []
+    bib_entries = []
+    in_bib = False
+
+    for para in paragraphs:
+        lines_in_para = para.splitlines()
+        flat = " ".join(l.strip() for l in lines_in_para).strip()
+
+        if re.match(r"^(?:Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography):?\s*$", flat, re.I):
+            in_bib = True
+            continue
+
+        if in_bib or is_apa_citation(flat):
+            in_bib = True
+            esc_cite = format_content_to_typst(flat)
+            bib_entries.append(f"#block(spacing: 1.2em)[\n  #set par(hanging-indent: 12.7mm, first-line-indent: 0pt, justify: false)\n  {esc_cite}\n]")
+            continue
+
+        is_h = (not flat.endswith((".", "...", ";")) and len(flat) <= 300 and len(lines_in_para) <= 3 and
+                not any(flat.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "weil ", "dass ", "wenn ", "obwohl "]))
+
+        if flat.startswith("# ") or (flat.isupper() and len(flat) <= 120):
+            esc_h = format_content_to_typst(re.sub(r"^#+\s*", "", flat))
+            elements.append(f"\n#align(center)[#text(weight: \"bold\")[{esc_h}]]\n")
+        elif is_h or flat.startswith("## "):
+            esc_h = format_content_to_typst(re.sub(r"^#+\s*", "", flat))
+            elements.append(f"\n#text(weight: \"bold\")[{esc_h}]\n")
+        else:
+            esc_p = format_content_to_typst(flat)
+            elements.append(f"{esc_p}\n")
+
+    apa_body = "\n".join(elements)
+
+    apa_refs = ""
+    if bib_entries:
+        apa_refs = f"""
+#pagebreak()
+#align(center)[#text(weight: "bold")[References]]
+#v(1.2em)
+
+{"".join(bib_entries)}
+"""
+
+    course_line = f"  #text()[{escape_typst_line(course)}]\n" if course else ""
+    inst_line = f"  #text()[{escape_typst_line(instructor)}]\n" if instructor else ""
+
+    typst_apa = f"""#set page(
+  paper: "us-letter",
+  margin: (x: 25.4mm, top: 25.4mm, bottom: 25.4mm),
+  header: context [
+    #align(right)[#text(font: ("Times New Roman", "Times", "PT Serif", "serif"), size: 12pt)[#counter(page).display()]]
+  ]
+)
+#set text(
+  font: ("Times New Roman", "Times", "PT Serif", "serif"),
+  size: 12pt,
+  lang: "en"
+)
+#set par(
+  justify: false,
+  leading: 1.15em,
+  first-line-indent: 12.7mm
+)
+
+// APA 7 Student Title Page (Seite 1)
+#v(72pt)
+#align(center)[
+  #text(weight: "bold")[{escape_typst_line(doc_title)}]
+  #v(24pt)
+  #text()[{escape_typst_line(doc_author)}]
+  #linebreak()
+  #text()[{escape_typst_line(institution)}]
+{course_line}{inst_line}  #linebreak()
+  #text()[{escape_typst_line(doc_date)}]
+]
+
+#pagebreak()
+
+// Seite 2: Beginn des Aufsatzes mit zentriertem Titel
+#align(center)[
+  #text(weight: "bold")[{escape_typst_line(doc_title)}]
+]
+#v(1.2em)
+
+{apa_body}
+{apa_refs}
+"""
+    tmp_typ = f"{abs_output}.tmp_{os.getpid()}.typ"
+    with open(tmp_typ, "w", encoding="utf-8") as f:
+        f.write(typst_apa)
+
+    cmd = [TYPST_BIN, "compile", "--root", "/", tmp_typ, abs_output]
+    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=60)
+
+    if os.path.exists(tmp_typ):
+        try:
+            os.remove(tmp_typ)
+        except Exception:
+            pass
+
+    if res.returncode == 0 and os.path.exists(abs_output) and os.path.getsize(abs_output) > 0:
+        print(f"Erfolg: PDF erzeugt -> {abs_output}")
+        if open_preview:
+            subprocess.run(["open", abs_output], timeout=60)
+        return True
+    else:
+        print(f"Fehler bei APA-Kompilierung:\n{res.stderr}", file=sys.stderr)
+        return False
 
 def convert_txt_to_pdf(
     input_path: str,
@@ -1053,13 +1306,19 @@ def convert_txt_to_pdf(
                 deep_research=False,
                 preview=open_preview
             )
-            out_p = res_dict.get("pdf")
+            out_p = res_dict.get("pdf") if isinstance(res_dict, dict) else None
             if out_p and os.path.exists(out_p):
                 return True
-            return False
-        except Exception as e:
-            print(f"Fehler bei APA-Kompilierung: {e}", file=sys.stderr)
-            return False
+        except Exception:
+            pass
+        return convert_txt_to_apa_standalone(
+            input_path=abs_input,
+            output_path=output_path,
+            title=title,
+            author=author,
+            date=date,
+            open_preview=open_preview
+        )
 
     if fmt == "br1":
         final_columns = columns if columns is not None else 1
@@ -1077,13 +1336,8 @@ def convert_txt_to_pdf(
         final_gutter = gutter if gutter is not None else "4.8mm"
         final_font_size = font_size if font_size is not None else "8pt"
 
-    # Automatische Extraktion aus Dateinamen (z. B. "Titel - Autor")
-    file_title_candidate = None
-    file_author_candidate = None
-    fn_match = re.search(r"^(.*?)\s*[\-–—]\s*(?:(?:von|by|autor|author)\s+)?([A-ZÄÖÜ][a-zäöüß]+(?:\s+[A-ZÄÖÜ][a-zäöüß]+)+)$", base_name, re.I)
-    if fn_match:
-        file_title_candidate = fn_match.group(1).strip()
-        file_author_candidate = fn_match.group(2).strip()
+    # Automatische Extraktion aus Dateinamen (z. B. "Titel : Autor" oder "Titel - Autor")
+    file_title_candidate, file_author_candidate = parse_title_author_from_filename(base_name)
 
     is_rtfd = abs_input.lower().endswith(".rtfd")
     is_rtf = is_rtfd or abs_input.lower().endswith(".rtf")
@@ -1095,9 +1349,10 @@ def convert_txt_to_pdf(
     final_font_size = f"{base_pt:g}pt"
     title_size = f"{base_pt + 2.0:g}pt"
     caption_size = f"{max(base_pt - 2.0, 3.0):g}pt"
+    hanging_indent = "12.7mm" if final_columns == 1 else "6mm"
 
     if is_rtf:
-        body_text, urls, rtf_title, rtf_author, rtf_date = parse_rtf_to_typst(
+        body_text, urls, rtf_title, rtf_author, rtf_date, has_explicit_bib = parse_rtf_to_typst(
             abs_input,
             expected_title=title or file_title_candidate,
             expected_author=author or file_author_candidate,
@@ -1105,7 +1360,8 @@ def convert_txt_to_pdf(
             images=images,
             caption_size=caption_size,
             title_size=title_size,
-            use_initial=final_initial
+            use_initial=final_initial,
+            hanging_indent=hanging_indent
         )
         extracted_title = rtf_title if rtf_title else None
         extracted_author = rtf_author if rtf_author else None
@@ -1116,7 +1372,7 @@ def convert_txt_to_pdf(
 
         doc_dir = os.path.dirname(abs_input)
         extracted_title, extracted_author, extracted_date, body_lines = extract_metadata_and_body(raw_content, default_author=author, default_date=date)
-        body_text, urls = parse_body_to_typst(body_lines, images=images, caption_size=caption_size, use_initial=final_initial, doc_dir=doc_dir)
+        body_text, urls, has_explicit_bib = parse_body_to_typst(body_lines, images=images, caption_size=caption_size, use_initial=final_initial, doc_dir=doc_dir, hanging_indent=hanging_indent)
 
     raw_title = title if title else (extracted_title if extracted_title else (file_title_candidate if file_title_candidate else base_name))
     target_author = author if author else (extracted_author if extracted_author else file_author_candidate)
@@ -1138,7 +1394,10 @@ def convert_txt_to_pdf(
     else:
         font_spec = '("PT Serif", "EB Garamond", "Times New Roman", "Times")'
 
-    bibliography_typst = generate_bibliography_typst(urls, font_spec=font_spec, font_size=final_font_size, title_size=title_size)
+    if has_explicit_bib:
+        bibliography_typst = ""
+    else:
+        bibliography_typst = generate_bibliography_typst(urls, font_spec=font_spec, font_size=final_font_size, title_size=title_size)
 
     author_block = ""
     if doc_author:
