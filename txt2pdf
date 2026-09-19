@@ -756,14 +756,15 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                 typst_elements.append(f"- {item_text}\n")
             continue
 
-        # 10. Nutzerregel: Große Überschrift: Ein Satz oder mehrere Wörter ohne Punkt am Ende (Zentriert & Fett)
-        is_large_heading = (
+        # 10a. Überschrift 1: Ein Satz oder mehrere Wörter ohne Punkt am Ende (Zentriert & Fett)
+        is_heading_1 = (
             not flat_text.endswith((".", "...", ";", ":", "!", "?")) and
             len(flat_text) <= 300 and
             len(lines_in_para) <= 3 and
+            not is_apa_citation(flat_text) and
             not any(flat_text.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "weil ", "dass ", "wenn ", "obwohl ", "währenddessen "])
         )
-        if is_large_heading:
+        if is_heading_1:
             h_text = format_content_to_typst(flat_text)
             top_v = "#v(2.5mm)\n" if typst_elements else ""
             typst_elements.append(
@@ -771,18 +772,20 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             )
             continue
 
-        # 10b. Nutzerregel: Kleine Überschrift: Ein Satz mit Punkt am Ende (kein Initial, fett hervorgehoben)
-        is_small_heading = (
+        # 10b. Überschrift 2: Ein Satz MIT Punkt am Ende (Blocktext & Fett)
+        is_heading_2 = (
             is_single_sentence(flat_text) and
             15 <= len(flat_text) <= 350 and
             len(lines_in_para) <= 4 and
             not is_apa_citation(flat_text) and
             not any(flat_text.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "dass "])
         )
-        if is_small_heading:
+        if is_heading_2:
             h_text = format_content_to_typst(flat_text)
-            top_v = "#v(2mm)\n" if typst_elements else ""
-            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#1a1a1a\"))[{h_text}]\n#v(1.2mm)\n")
+            top_v = "#v(2.0mm)\n" if typst_elements else ""
+            typst_elements.append(
+                f"{top_v}#par(justify: true)[\n  #text(weight: \"bold\", fill: rgb(\"#111111\"))[{h_text}]\n]\n#v(1.0mm)\n"
+            )
             continue
 
         # 11. Regulärer Fließtextabsatz (Standard mit optionalem Initial im 1. Fließtext-Absatz)
@@ -1139,15 +1142,17 @@ def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_autho
         is_lead_heading = (len(typst_blocks) <= 2) and is_fully_bold and len(p_plain_clean) <= 280
         is_section_heading = is_fully_bold and len(p_plain_clean) <= 160
 
-        # Nutzerregel: Große Überschrift: Ein Satz oder mehrere Wörter ohne Punkt am Ende (Zentriert & Fett)
-        is_large_heading = (
+        # Nutzerregel:
+        # Überschrift 1: Ein Satz oder mehrere Wörter ohne Punkt am Ende (Zentriert & Fett)
+        is_heading_1 = (
             not p_plain_clean.endswith((".", "...", ";", ":", "!", "?")) and
             len(p_plain_clean) <= 300 and
+            not is_apa_citation(p_plain_clean) and
             not any(p_plain_clean.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "weil ", "dass ", "wenn ", "obwohl "])
         )
 
-        # Nutzerregel: Kleine Überschrift: Ein Satz mit Punkt am Ende
-        is_small_heading = (
+        # Überschrift 2: Ein Satz MIT Punkt am Ende (Blocktext & Fett)
+        is_heading_2 = (
             is_single_sentence(p_plain_clean) and
             15 <= len(p_plain_clean) <= 350 and
             not is_apa_citation(p_plain_clean) and
@@ -1158,12 +1163,14 @@ def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_autho
             typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    {content}\n  ]\n]")
         elif p['align'] == 'right':
             typst_blocks.append(f"#align(right)[\n  #par(justify: false)[\n    {content}\n  ]\n]")
-        elif p['heading'] or is_section_heading or is_large_heading:
+        elif p['heading'] or is_section_heading or is_heading_1 or (is_lead_heading and not is_heading_2):
             inner_c = t_trimmed[8:-1] if is_fully_bold else content
-            typst_blocks.append(f"#v(2.5mm)\n#align(center)[\n  #par(justify: false)[\n    #strong[{inner_c}]\n  ]\n]\n#v(1.2mm)")
-        elif is_small_heading or is_lead_heading:
+            top_v = "#v(2.5mm)\n" if typst_blocks else ""
+            typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #strong[{inner_c}]\n  ]\n]\n#v(1.2mm)")
+        elif is_heading_2:
             inner_c = t_trimmed[8:-1] if is_fully_bold else content
-            typst_blocks.append(f"#v(1.8mm)\n#strong[{inner_c}]\n#v(1mm)")
+            top_v = "#v(2.0mm)\n" if typst_blocks else ""
+            typst_blocks.append(f"{top_v}#par(justify: true)[\n  #strong[{inner_c}]\n]\n#v(1.0mm)")
         else:
             if use_initial and not first_body_para_done:
                 content_init = apply_initial_to_typst_element(content)
