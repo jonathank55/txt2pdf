@@ -129,16 +129,41 @@ def apply_initial_to_typst_element(content: str) -> str:
         return s
     return f"#dropcap(\n  height: 3,\n  gap: 2pt,\n  justify: true,\n)[{s}]"
 
+def is_single_sentence(text: str) -> bool:
+    """Erkennt deterministisch, ob ein Absatz aus genau einem Satz mit Punkt am Ende besteht."""
+    s = text.strip()
+    if not s.endswith((".", "!", "?")):
+        return False
+    if len(s) < 10 or len(s) > 350:
+        return False
+    # Entferne bekannte gängige Abkürzungen temporär für die Satzgrenzenprüfung
+    clean = re.sub(
+        r"\b(?:z\. B\.|d\. h\.|u\. a\.|u\. ä\.|bzw\.|ca\.|evtl\.|inkl\.|Dr\.|Prof\.|Hr\.|Fr\.|Nr\.|Abs\.|Art\.|Vgl\.|vgl\.|S\.|ff\.|etc\.|e\.g\.|i\.e\.)",
+        "ABBR",
+        s,
+        flags=re.IGNORECASE
+    )
+    inner = clean[:-1].strip()
+    has_internal_sentence = bool(re.search(r"[\.\!\?]\s+[A-ZÄÖÜ]", inner))
+    return not has_internal_sentence
+
 def is_author_name(candidate: str) -> bool:
     """Prüft zuverlässig, ob eine Zeichenkette den Namen einer realen Person / Autors darstellt."""
-    s = candidate.strip()
-    if not s or len(s) < 3 or len(s) > 60:
+    if not candidate:
         return False
-    if s.endswith((".", "!", "?", ";", ":", ",")):
-        if not re.search(r"\b[A-ZÄÖÜ]\.$", s):
-            return False
+    s = candidate.strip()
+    if len(s) < 3 or len(s) > 60:
+        return False
+    if s.lower() in ("jonathan klatchko", "yona klatchko"):
+        return True
+    # Eine Zeile in Versalien (ALL CAPS) mit mehreren Wörtern ist eine Überschrift, niemals ein Autor
+    if s.isupper() and len(s.split()) > 1:
+        return False
     if s.startswith(("-", "–", "—", "#", "*", ">", "•")):
         return False
+    if s.endswith((".", "!", "?", ";", ":", "«", "»", "\"", "“", "”")):
+        if not re.search(r"\b[A-ZÄÖÜ]\.$", s):
+            return False
     m_pref = re.match(r"^(?:autor|author|von|by|verfasser|written\s+by)\s*[:\-–—]?\s*(.+)$", s, re.IGNORECASE)
     if m_pref:
         s = m_pref.group(1).strip()
@@ -148,6 +173,11 @@ def is_author_name(candidate: str) -> bool:
     s_clean = re.sub(title_pattern, "", s, flags=re.IGNORECASE)
     s_clean = re.sub(suffix_pattern, "", s_clean, flags=re.IGNORECASE).strip()
 
+    if "," in s_clean:
+        parts = [p.strip() for p in s_clean.split(",")]
+        if len(parts) != 2 or len(parts[0].split()) > 2 or len(parts[1].split()) > 2:
+            return False
+
     stopwords = {
         "der", "die", "das", "den", "dem", "des", "ein", "eine", "einer", "eines", "einem", "einen",
         "und", "oder", "aber", "denn", "weil", "dass", "wenn", "ob", "wie", "als",
@@ -155,7 +185,12 @@ def is_author_name(candidate: str) -> bool:
         "ist", "sind", "war", "waren", "wird", "werden", "hat", "haben", "hatte", "hatten", "kann", "können", "muss", "müssen",
         "kapitel", "chapter", "abschnitt", "section", "inhalt", "literatur", "literaturverzeichnis", "references", "quellen",
         "zusammenfassung", "abstract", "einleitung", "introduction", "fazit", "schluss", "anhang", "tabelle", "abbildung",
-        "the", "a", "an", "and", "or", "but", "of", "for", "with", "from", "into", "is", "are", "was", "were"
+        "the", "a", "an", "and", "or", "but", "of", "for", "with", "from", "into", "is", "are", "was", "were",
+        "wer", "wen", "wem", "wessen", "was", "wo", "woher", "wohin", "wann", "warum", "weshalb", "wieso", "welcher", "welche", "welches",
+        "who", "whom", "whose", "what", "which", "where", "when", "why", "how",
+        "artikel", "aufsatz", "bericht", "essay", "notiz", "notizen", "entwurf", "text", "dokument", "paper", "report", "draft", "article",
+        "kolumne", "kommentar", "lehrbuch", "manuskript", "übersicht", "gliederung",
+        "schwitzt", "herrscht", "denkt", "schreibt", "sagt", "geht", "kommt", "steht", "liegt", "bleibt", "sieht", "zeigt", "lebt", "stirbt", "zahlt", "kostet"
     }
 
     words = re.findall(r"[A-Za-zÄÖÜäöüß]+(?:-[A-Za-zÄÖÜäöüß]+)?|\b[A-ZÄÖÜ]\.", s_clean)
@@ -171,8 +206,27 @@ def is_author_name(candidate: str) -> bool:
     return True
 
 def parse_title_author_from_filename(base_name: str) -> Tuple[Optional[str], Optional[str]]:
-    """Extrahiert Titel und Autor aus dem Dateinamen unter Berücksichtigung verschiedener Trennzeichen."""
-    m = re.search(r"^(.*?)\s*(?:[:|]|\s[-–—]\s|(?:,\s*)?\b(?:von|by|autor|author)\b)\s*(.+)$", base_name, re.IGNORECASE)
+    """Extrahiert Titel und Autor deterministisch aus dem Dateinamen."""
+    doc_prefixes = {
+        "artikel", "aufsatz", "bericht", "essay", "notiz", "notizen", "entwurf", "text", 
+        "dokument", "paper", "report", "draft", "article", "kolumne", "kommentar", "manuskript"
+    }
+    parts = [p.strip() for p in re.split(r"\s*[:|]\s*|\s+[-–—]\s+", base_name) if p.strip()]
+    if len(parts) >= 2:
+        if parts[0].lower() in doc_prefixes and len(parts) > 2:
+            parts = parts[1:]
+        if is_author_name(parts[-1]):
+            author_cand = parts[-1]
+            title_cand = " : ".join(parts[:-1])
+            if title_cand.lower() in doc_prefixes:
+                title_cand = ""
+            return (title_cand or None), author_cand
+        if is_author_name(parts[0]) and parts[0].lower() not in doc_prefixes:
+            author_cand = parts[0]
+            title_cand = " : ".join(parts[1:])
+            return (title_cand or None), author_cand
+
+    m = re.search(r"^(.*?)\s*(?:,\s*)?\b(?:von|by|autor|author)\b\s*(.+)$", base_name, re.IGNORECASE)
     if m:
         c1 = m.group(1).strip()
         c2 = m.group(2).strip()
@@ -684,13 +738,15 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                 explicit_bib_entries.append(flat_text)
             continue
 
-        # 8. Versalien-Überschriften (ALL CAPS / Großbuchstaben)
+        # 8. Versalien-Überschriften (ALL CAPS / Großbuchstaben) -> Große Überschrift: Zentriert & Fett
         alpha_chars = re.findall(r"[A-Za-zÄÖÜäöüß]", flat_text)
         is_all_caps = len(alpha_chars) >= 3 and flat_text.isupper() and len(flat_text) <= 200 and len(flat_text.split()) <= 20
         if is_all_caps:
             h_text = escape_typst_line(flat_text)
-            top_v = "#v(2.4mm)\n" if typst_elements else ""
-            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#111111\"))[{h_text}]\n#v(0.8mm)\n")
+            top_v = "#v(2.5mm)\n" if typst_elements else ""
+            typst_elements.append(
+                f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#111111\"))[{h_text}]\n  ]\n]\n#v(1.2mm)\n"
+            )
             continue
 
         # 9. Aufzählungspunkte
@@ -700,20 +756,36 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                 typst_elements.append(f"- {item_text}\n")
             continue
 
-        # 10. Nutzerregel: Ein Satz ohne Punkt am Ende, von anderen Absätzen getrennt, ist eine Überschrift
-        is_heading_by_rule = (
-            not flat_text.endswith((".", "...", ";")) and
+        # 10. Nutzerregel: Große Überschrift: Ein Satz oder mehrere Wörter ohne Punkt am Ende (Zentriert & Fett)
+        is_large_heading = (
+            not flat_text.endswith((".", "...", ";", ":", "!", "?")) and
             len(flat_text) <= 300 and
             len(lines_in_para) <= 3 and
             not any(flat_text.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "weil ", "dass ", "wenn ", "obwohl ", "währenddessen "])
         )
-        if is_heading_by_rule:
+        if is_large_heading:
             h_text = format_content_to_typst(flat_text)
-            top_v = "#v(2.4mm)\n" if typst_elements else ""
-            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#111111\"))[{h_text}]\n#v(0.8mm)\n")
+            top_v = "#v(2.5mm)\n" if typst_elements else ""
+            typst_elements.append(
+                f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#111111\"))[{h_text}]\n  ]\n]\n#v(1.2mm)\n"
+            )
             continue
 
-        # 11. Regulärer Fließtextabsatz (Standard mit optionalem Initial im 1. Absatz)
+        # 10b. Nutzerregel: Kleine Überschrift: Ein Satz mit Punkt am Ende (kein Initial, fett hervorgehoben)
+        is_small_heading = (
+            is_single_sentence(flat_text) and
+            15 <= len(flat_text) <= 350 and
+            len(lines_in_para) <= 4 and
+            not is_apa_citation(flat_text) and
+            not any(flat_text.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "dass "])
+        )
+        if is_small_heading:
+            h_text = format_content_to_typst(flat_text)
+            top_v = "#v(2mm)\n" if typst_elements else ""
+            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#1a1a1a\"))[{h_text}]\n#v(1.2mm)\n")
+            continue
+
+        # 11. Regulärer Fließtextabsatz (Standard mit optionalem Initial im 1. Fließtext-Absatz)
         escaped_para = format_content_to_typst(flat_text)
         if use_initial and not first_body_para_done:
             escaped_para = apply_initial_to_typst_element(escaped_para)
@@ -1067,21 +1139,31 @@ def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_autho
         is_lead_heading = (len(typst_blocks) <= 2) and is_fully_bold and len(p_plain_clean) <= 280
         is_section_heading = is_fully_bold and len(p_plain_clean) <= 160
 
-        # Nutzerregel: Ein Satz ohne Punkt am Ende, von anderen Absätzen getrennt, ist eine Überschrift
-        is_heading_by_rule = (
-            not p_plain_clean.endswith((".", "...", ";")) and
+        # Nutzerregel: Große Überschrift: Ein Satz oder mehrere Wörter ohne Punkt am Ende (Zentriert & Fett)
+        is_large_heading = (
+            not p_plain_clean.endswith((".", "...", ";", ":", "!", "?")) and
             len(p_plain_clean) <= 300 and
             not any(p_plain_clean.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "weil ", "dass ", "wenn ", "obwohl "])
+        )
+
+        # Nutzerregel: Kleine Überschrift: Ein Satz mit Punkt am Ende
+        is_small_heading = (
+            is_single_sentence(p_plain_clean) and
+            15 <= len(p_plain_clean) <= 350 and
+            not is_apa_citation(p_plain_clean) and
+            not any(p_plain_clean.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "dass "])
         )
 
         if p['align'] == 'center':
             typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    {content}\n  ]\n]")
         elif p['align'] == 'right':
             typst_blocks.append(f"#align(right)[\n  #par(justify: false)[\n    {content}\n  ]\n]")
-        elif p['heading'] or is_section_heading or is_heading_by_rule:
-            typst_blocks.append(f"#v(1.8mm)\n#strong[{content if not is_fully_bold else t_trimmed[8:-1]}]\n#v(0.8mm)")
-        elif is_lead_heading:
-            typst_blocks.append(f"#v(1.2mm)\n#strong[{t_trimmed[8:-1]}]\n#v(1.2mm)")
+        elif p['heading'] or is_section_heading or is_large_heading:
+            inner_c = t_trimmed[8:-1] if is_fully_bold else content
+            typst_blocks.append(f"#v(2.5mm)\n#align(center)[\n  #par(justify: false)[\n    #strong[{inner_c}]\n  ]\n]\n#v(1.2mm)")
+        elif is_small_heading or is_lead_heading:
+            inner_c = t_trimmed[8:-1] if is_fully_bold else content
+            typst_blocks.append(f"#v(1.8mm)\n#strong[{inner_c}]\n#v(1mm)")
         else:
             if use_initial and not first_body_para_done:
                 content_init = apply_initial_to_typst_element(content)
@@ -1108,12 +1190,22 @@ def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_autho
     return "\n\n".join(typst_blocks), unique_urls, extracted_title, extracted_author, extracted_date, rtf_bib_entries, bib_heading_title
 
 def clean_title_and_author(title: str, author: str = None, fallback_author: str = None):
-    """Bereinigt Titel und Autor deterministisch von redundanten Namensdopplungen."""
+    """Bereinigt Titel und Autor deterministisch von redundanten Namensdopplungen und korrigiert Inversionen."""
     final_author = author.strip() if (author and author.strip()) else fallback_author
     if not title:
         return "", final_author
 
     cleaned_title = title.strip()
+
+    # Inversions-Korrektur: Falls Titel fälschlicherweise ein Personenname ist und Autor eine Überschrift/Titel
+    if cleaned_title and is_author_name(cleaned_title) and (not final_author or not is_author_name(final_author)):
+        cleaned_title, final_author = (final_author if final_author else ""), cleaned_title
+
+    # Bereinige führende Dokumenttyp-Präfixe aus dem Titel (z. B. "Artikel : Wer schwitzt..." -> "Wer schwitzt...")
+    m_pref = re.match(r"^(?:artikel|aufsatz|bericht|essay|notizen?|entwurf|text|dokument|paper|report|article)\s*[:|]\s*(.+)$", cleaned_title, re.IGNORECASE)
+    if m_pref:
+        cleaned_title = m_pref.group(1).strip()
+
     authors_to_check = [a for a in [final_author, "Jonathan Klatchko", "Yona Klatchko"] if a]
     seen = set()
     unique_authors = [a for a in authors_to_check if a and not (a in seen or seen.add(a))]
@@ -1201,17 +1293,18 @@ def extract_metadata_and_body(raw_text: str, default_author: str = None, default
         if is_dt:
             continue
 
-        # 4. Autor ohne Präfix (z. B. "Jonathan Klatchko")
+        # 4. Titel ohne Markdown-Syntax: Ein Satz oder mehrere Wörter ohne Punkt am Ende (bis zu 350 Zeichen)
+        if not extracted_title:
+            if len(line_s) <= 350 and not line_s.endswith((".", "!", "?")) and not line_s.startswith(("-", "*", "•", "##", ">")):
+                if not is_author_name(line_s):
+                    extracted_title = line_s
+                    curr_idx += 1
+                    continue
+
+        # 5. Autor ohne Präfix (z. B. "Jonathan Klatchko")
         if is_author_name(line_s):
             if not extracted_author:
                 extracted_author = line_s
-                curr_idx += 1
-                continue
-
-        # 5. Titel ohne Markdown-Syntax: Ein Satz ohne Punkt am Ende (bis zu 350 Zeichen)
-        if not extracted_title:
-            if len(line_s) <= 350 and not line_s.endswith((".", "!", "?")) and not line_s.startswith(("-", "*", "•", "##", ">")):
-                extracted_title = line_s
                 curr_idx += 1
                 continue
 
@@ -1223,6 +1316,11 @@ def extract_metadata_and_body(raw_text: str, default_author: str = None, default
         curr_idx += 1
 
     clean_body_lines = lines[curr_idx:]
+
+    # Sicherheits-Korrektur: Falls Titel ein Autor ist
+    if extracted_title and is_author_name(extracted_title) and (not extracted_author or not is_author_name(extracted_author)):
+        extracted_title, extracted_author = (extracted_author if extracted_author else None), extracted_title
+
     final_author = extracted_author if extracted_author else default_author
     final_date = extracted_date if extracted_date else default_date
     return extracted_title, final_author, final_date, clean_body_lines
@@ -1254,8 +1352,8 @@ def convert_txt_to_apa_standalone(
     file_title, file_author = parse_title_author_from_filename(base_name)
     ext_title, ext_author, ext_date, body_lines = extract_metadata_and_body(raw_content, default_author=author, default_date=date)
 
-    doc_title = title or ext_title or file_title or base_name
-    doc_author = author or ext_author or file_author or "Jonathan Klatchko"
+    doc_title = title or file_title or ext_title or base_name
+    doc_author = author or file_author or ext_author or "Jonathan Klatchko"
     doc_date = date or ext_date or time.strftime("%B %d, %Y")
 
     doc_title, doc_author = clean_title_and_author(doc_title, doc_author, fallback_author=file_author)
@@ -1513,8 +1611,8 @@ def convert_txt_to_pdf(
         extracted_title, extracted_author, extracted_date, body_lines = extract_metadata_and_body(raw_content, default_author=author, default_date=date)
         body_text, urls, explicit_bib_entries, bib_heading_title = parse_body_to_typst(body_lines, images=images, caption_size=caption_size, use_initial=final_initial, doc_dir=doc_dir, hanging_indent=hanging_indent)
 
-    raw_title = title if title else (extracted_title if extracted_title else (file_title_candidate if file_title_candidate else base_name))
-    target_author = author if author else (extracted_author if extracted_author else file_author_candidate)
+    raw_title = title if title else (file_title_candidate if file_title_candidate else (extracted_title if extracted_title else base_name))
+    target_author = author if author else (file_author_candidate if file_author_candidate else extracted_author)
     doc_date = date if date else extracted_date
 
     # Single-Occurrence Invariante
