@@ -35,6 +35,7 @@ import re
 import urllib.request
 import urllib.parse
 import json
+import unicodedata
 from html import unescape
 from html.parser import HTMLParser
 from typing import List, Dict, Tuple, Set
@@ -235,6 +236,14 @@ def parse_title_author_from_filename(base_name: str) -> Tuple[Optional[str], Opt
         if is_author_name(c1):
             return c2, c1
     return None, None
+
+def is_matching_title(candidate: str, target: str) -> bool:
+    """Prüft deterministisch, ob zwei Titelbezeichnungen semantisch übereinstimmen."""
+    if not candidate or not target:
+        return False
+    c_clean = re.sub(r"^[#\s:|\-]+", "", unicodedata.normalize("NFC", candidate)).strip().lower()
+    t_clean = re.sub(r"^[#\s:|\-]+", "", unicodedata.normalize("NFC", target)).strip().lower()
+    return c_clean == t_clean
 
 def is_apa_citation(text: str) -> bool:
     """Erkennt deterministisch, ob ein Absatz einen normgerechten APA-Quellennachweis darstellt."""
@@ -1252,7 +1261,7 @@ def clean_title_and_author(title: str, author: str = None, fallback_author: str 
 
     return cleaned_title, final_author
 
-def extract_metadata_and_body(raw_text: str, default_author: str = None, default_date: str = None):
+def extract_metadata_and_body(raw_text: str, default_author: str = None, default_date: str = None, known_title: str = None):
     """Trennt Dokumenttitel, Autor, Datum und den eigentlichen Textkörper deterministisch."""
     lines = raw_text.splitlines()
     start_idx = 0
@@ -1273,13 +1282,27 @@ def extract_metadata_and_body(raw_text: str, default_author: str = None, default
             curr_idx += 1
             continue
 
-        # 1. Expliziter Markdown-Titel
-        if line_s.startswith("# ") and not extracted_title:
-            extracted_title = line_s[2:].strip()
+        # 1. Expliziter Titel-Präfix (z. B. "Titel: ...", "Title: ...")
+        m_t_prefix = re.match(r"^(?:Titel|Title|Thema|Subject):\s*(.+)$", line_s, re.IGNORECASE)
+        if m_t_prefix:
+            if not extracted_title:
+                extracted_title = m_t_prefix.group(1).strip()
             curr_idx += 1
             continue
 
-        # 2. Expliziter Autor-Präfix
+        # 2. Expliziter Markdown-Titel (# Titel)
+        if line_s.startswith("# ") and not line_s.startswith("##"):
+            cand = line_s[2:].strip()
+            if not known_title or is_matching_title(cand, known_title):
+                if not extracted_title:
+                    extracted_title = cand
+                curr_idx += 1
+                continue
+            else:
+                # Nicht als Dokumenttitel konsumieren, falls ein anderer Dokumenttitel vorgegeben ist
+                break
+
+        # 3. Expliziter Autor-Präfix
         m_auth = re.match(r"^(?:Autor|Author|Von|By|Verfasser|Written\s+by):\s*(.+)$", line_s, re.IGNORECASE)
         if m_auth:
             if not extracted_author:
@@ -1287,7 +1310,7 @@ def extract_metadata_and_body(raw_text: str, default_author: str = None, default
             curr_idx += 1
             continue
 
-        # 3. Datum
+        # 4. Datum
         is_dt = False
         for d_reg in date_regexes:
             m_d = d_reg.match(line_s)
@@ -1300,15 +1323,33 @@ def extract_metadata_and_body(raw_text: str, default_author: str = None, default
         if is_dt:
             continue
 
-        # 4. Titel ohne Markdown-Syntax: Ein Satz oder mehrere Wörter ohne Punkt am Ende (bis zu 350 Zeichen)
+        # 5. Titel ohne Markdown-Syntax / Präfix
+        # WICHTIG: Wenn known_title bereits vorliegt (Dateiname oder CLI -t), darf eine beliebige
+        # Inhaltszeile NIEMALS als Titel abgeschnitten werden! Sie ist Teil des Textkörpers (Überschrift 1 / 2).
+        # Nur wenn sie semantisch exakt mit known_title übereinstimmt, ist sie eine redundante Titeldopplung im Kopf.
         if not extracted_title:
-            if len(line_s) <= 350 and not line_s.endswith((".", "!", "?")) and not line_s.startswith(("-", "*", "•", "##", ">")):
-                if not is_author_name(line_s):
+            if known_title:
+                if is_matching_title(line_s, known_title):
                     extracted_title = line_s
                     curr_idx += 1
                     continue
+            else:
+                # Kein known_title vorhanden: Nur wenn unmittelbar danach ein Autor oder Datum folgt,
+                # kann eine kurze Zeile ohne Punkt als Titel im Kopf gewertet werden.
+                # Andernfalls bleibt sie Textinhalt!
+                has_subsequent_metadata = False
+                for check_i in range(curr_idx + 1, min(curr_idx + 4, len(lines))):
+                    next_s = lines[check_i].strip()
+                    if next_s and (is_author_name(next_s) or any(d_reg.match(next_s) for d_reg in date_regexes)):
+                        has_subsequent_metadata = True
+                        break
+                if has_subsequent_metadata and len(line_s) <= 200 and not line_s.endswith((".", "!", "?")) and not line_s.startswith(("-", "*", "•", "##", ">")):
+                    if not is_author_name(line_s):
+                        extracted_title = line_s
+                        curr_idx += 1
+                        continue
 
-        # 5. Autor ohne Präfix (z. B. "Jonathan Klatchko")
+        # 6. Autor ohne Präfix (z. B. "Jonathan Klatchko")
         if is_author_name(line_s):
             if not extracted_author:
                 extracted_author = line_s
@@ -1357,13 +1398,19 @@ def convert_txt_to_apa_standalone(
         raw_content = f.read()
 
     file_title, file_author = parse_title_author_from_filename(base_name)
-    ext_title, ext_author, ext_date, body_lines = extract_metadata_and_body(raw_content, default_author=author, default_date=date)
+    known_title = title or file_title
+    ext_title, ext_author, ext_date, body_lines = extract_metadata_and_body(
+        raw_content, default_author=author, default_date=date, known_title=known_title
+    )
 
     doc_title = title or file_title or ext_title or base_name
     doc_author = author or file_author or ext_author or "Jonathan Klatchko"
     doc_date = date or ext_date or time.strftime("%B %d, %Y")
 
     doc_title, doc_author = clean_title_and_author(doc_title, doc_author, fallback_author=file_author)
+
+    if ext_title and not is_matching_title(ext_title, doc_title):
+        body_lines = [ext_title, ""] + list(body_lines)
 
     paragraphs = []
     cur = []
@@ -1621,15 +1668,32 @@ def convert_txt_to_pdf(
             raw_content = f.read()
 
         doc_dir = os.path.dirname(abs_input)
-        extracted_title, extracted_author, extracted_date, body_lines = extract_metadata_and_body(raw_content, default_author=author, default_date=date)
-        body_text, urls, explicit_bib_entries, bib_heading_title = parse_body_to_typst(body_lines, images=images, caption_size=caption_size, use_initial=final_initial, doc_dir=doc_dir, hanging_indent=hanging_indent)
+        known_title = title or file_title_candidate
+        extracted_title, extracted_author, extracted_date, body_lines = extract_metadata_and_body(
+            raw_content, default_author=author, default_date=date, known_title=known_title
+        )
 
-    raw_title = title if title else (file_title_candidate if file_title_candidate else (extracted_title if extracted_title else base_name))
-    target_author = author if author else (file_author_candidate if file_author_candidate else extracted_author)
-    doc_date = date if date else extracted_date
+        raw_title = title if title else (file_title_candidate if file_title_candidate else (extracted_title if extracted_title else base_name))
+        target_author = author if author else (file_author_candidate if file_author_candidate else extracted_author)
+        doc_date = date if date else extracted_date
 
-    # Single-Occurrence Invariante
-    doc_title, doc_author = clean_title_and_author(raw_title, target_author, fallback_author=file_author_candidate)
+        # Single-Occurrence Invariante
+        doc_title, doc_author = clean_title_and_author(raw_title, target_author, fallback_author=file_author_candidate)
+
+        # Sicherheits-Invariante: Falls extracted_title vorliegt, dieser aber nicht dem Haupttitel entspricht,
+        # darf er keinesfalls verloren gehen, sondern muss als Inhaltszeile (Überschrift) im Textkörper verbleiben!
+        if extracted_title and not is_matching_title(extracted_title, doc_title):
+            body_lines = [extracted_title, ""] + list(body_lines)
+
+        body_text, urls, explicit_bib_entries, bib_heading_title = parse_body_to_typst(
+            body_lines, images=images, caption_size=caption_size, use_initial=final_initial, doc_dir=doc_dir, hanging_indent=hanging_indent
+        )
+
+    if is_rtf:
+        raw_title = title if title else (file_title_candidate if file_title_candidate else (extracted_title if extracted_title else base_name))
+        target_author = author if author else (file_author_candidate if file_author_candidate else extracted_author)
+        doc_date = date if date else extracted_date
+        doc_title, doc_author = clean_title_and_author(raw_title, target_author, fallback_author=file_author_candidate)
 
     if font:
         font_spec = f'("{font}", "PT Serif", "EB Garamond", "Times New Roman", "Times")'
