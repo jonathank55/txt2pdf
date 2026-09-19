@@ -1519,18 +1519,19 @@ def convert_txt_to_apa_standalone(
 {apa_body}
 {apa_refs}
 """
-    tmp_typ = f"{abs_output}.tmp_{os.getpid()}.typ"
-    with open(tmp_typ, "w", encoding="utf-8") as f:
-        f.write(typst_apa)
+    tmp_typ = f"{abs_output}.tmp_{os.getpid()}_{int(time.time()*1000)}.typ"
+    try:
+        with open(tmp_typ, "w", encoding="utf-8") as f:
+            f.write(typst_apa)
 
-    cmd = [TYPST_BIN, "compile", "--root", "/", tmp_typ, abs_output]
-    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=60)
-
-    if os.path.exists(tmp_typ):
-        try:
-            os.remove(tmp_typ)
-        except Exception:
-            pass
+        cmd = [TYPST_BIN, "compile", "--root", "/", tmp_typ, abs_output]
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=60)
+    finally:
+        if os.path.exists(tmp_typ):
+            try:
+                os.remove(tmp_typ)
+            except OSError:
+                pass
 
     if res.returncode == 0 and os.path.exists(abs_output) and os.path.getsize(abs_output) > 0:
         print(f"Erfolg: PDF erzeugt -> {abs_output}")
@@ -1810,18 +1811,19 @@ def convert_txt_to_pdf(
 {bibliography_typst}
 """
 
-    tmp_typ = f"{abs_output}.tmp_{os.getpid()}.typ"
-    with open(tmp_typ, "w", encoding="utf-8") as f:
-        f.write(typst_template)
+    tmp_typ = f"{abs_output}.tmp_{os.getpid()}_{int(time.time()*1000)}.typ"
+    try:
+        with open(tmp_typ, "w", encoding="utf-8") as f:
+            f.write(typst_template)
 
-    cmd = [TYPST_BIN, "compile", "--root", "/", tmp_typ, abs_output]
-    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=60)
-
-    if os.path.exists(tmp_typ):
-        try:
-            os.remove(tmp_typ)
-        except Exception:
-            pass
+        cmd = [TYPST_BIN, "compile", "--root", "/", tmp_typ, abs_output]
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=60)
+    finally:
+        if os.path.exists(tmp_typ):
+            try:
+                os.remove(tmp_typ)
+            except OSError:
+                pass
 
     if res.returncode == 0 and os.path.exists(abs_output) and os.path.getsize(abs_output) > 0:
         print(f"Erfolg: PDF erzeugt -> {abs_output}")
