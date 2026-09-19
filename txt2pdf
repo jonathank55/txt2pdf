@@ -1733,7 +1733,11 @@ def convert_txt_to_pdf(
       gutter: 6mm,
       align: (left + horizon, right + horizon),
       [
-        #text(size: {title_size}, weight: "bold", fill: rgb("#111111"))[{escape_typst_line(doc_title)}]{author_block}
+        #align(left)[
+          #par(justify: false)[
+            #text(size: {title_size}, weight: "bold", fill: rgb("#111111"))[{escape_typst_line(doc_title)}]{author_block}
+          ]
+        ]
       ],
       [
         #text(fill: rgb("#666666"))[{escape_typst_line(doc_date)}]
@@ -1741,7 +1745,9 @@ def convert_txt_to_pdf(
     )"""
     else:
         header_content = f"""#align(left)[
-      #text(size: {title_size}, weight: "bold", fill: rgb("#111111"))[{escape_typst_line(doc_title)}]{author_block}
+      #par(justify: false)[
+        #text(size: {title_size}, weight: "bold", fill: rgb("#111111"))[{escape_typst_line(doc_title)}]{author_block}
+      ]
     ]"""
 
     if is_rtf:
@@ -1753,7 +1759,9 @@ def convert_txt_to_pdf(
     if page_num > 1 [
       #place(top, dy: 8mm)[
         #align(left)[
-          #text(size: 8.5pt, fill: rgb("#555555"))[{escape_typst_line(doc_title)}]
+          #par(justify: false)[
+            #text(size: 8.5pt, fill: rgb("#555555"))[{escape_typst_line(doc_title)}]
+          ]
           #v(1.2mm)
           #line(length: 100%, stroke: 0.35pt + rgb("#cbd5e1"))
         ]
@@ -1763,6 +1771,7 @@ def convert_txt_to_pdf(
         top_header_box = f"""// Vollbreite-Titelbox gemäß Invariante (Titel dynamisch: Textgröße + 4pt)
 #place(top, scope: "parent", float: true)[
   #block(width: 100%, inset: (bottom: 2.5mm))[
+    #set par(justify: false)
     {header_content}
     #v(1.2mm)
     #line(length: 100%, stroke: 0.5pt + rgb("#333333"))
