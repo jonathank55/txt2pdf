@@ -1379,14 +1379,20 @@ def convert_txt_to_apa_standalone(
         lines_in_para = para.splitlines()
         flat = " ".join(l.strip() for l in lines_in_para).strip()
 
-        if re.match(r"^(?:Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography):?\s*$", flat, re.I):
+        words_f = flat.split()
+        is_all_urls = bool(words_f and all(w.startswith(("http://", "https://", "doi:", "10.")) or w.lower() in ("doi.org", "url:") for w in words_f))
+        if re.match(r"^(?:Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography|Library):?\s*$", flat, re.I):
             in_bib = True
             continue
 
-        if in_bib or is_apa_citation(flat):
+        if in_bib or is_apa_citation(flat) or is_all_urls:
             in_bib = True
-            esc_cite = format_content_to_typst(flat)
-            bib_entries.append(f"#block(spacing: 1.2em)[\n  #set par(hanging-indent: 12.7mm, first-line-indent: 0pt, justify: false)\n  {esc_cite}\n]")
+            cit_data = format_citation_to_apa_7(flat)
+            if cit_data and cit_data.get("formatted"):
+                bib_entries.append(f"#block(spacing: 1.2em)[\n  #set par(hanging-indent: 12.7mm, first-line-indent: 0pt, justify: false)\n  {cit_data['formatted']}\n]")
+            else:
+                esc_cite = format_content_to_typst(flat)
+                bib_entries.append(f"#block(spacing: 1.2em)[\n  #set par(hanging-indent: 12.7mm, first-line-indent: 0pt, justify: false)\n  {esc_cite}\n]")
             continue
 
         is_h = (not flat.endswith((".", "...", ";")) and len(flat) <= 300 and len(lines_in_para) <= 3 and
