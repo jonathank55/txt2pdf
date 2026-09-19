@@ -58,6 +58,7 @@ def escape_typst_line(line: str) -> str:
     res = line
     for c in chars_to_escape:
         res = res.replace(c, f"\\{c}")
+    res = res.replace("//", r"\/\/").replace("/*", r"\/\*").replace("*/", r"\*\/")
     return res
 
 def format_content_to_typst(text: str) -> str:
@@ -107,9 +108,10 @@ def format_content_to_typst(text: str) -> str:
     text = text.replace("—", " – ").replace("---", "--")
     text = re.sub(r'\s*–\s*', ' – ', text)
 
-    # 4. Verbleibende Typst-Sonderzeichen maskieren (verhindert unclosed delimiter / math / label-Kollisionen)
+    # 4. Verbleibende Typst-Sonderzeichen und Kommentarzeichen maskieren (verhindert unclosed delimiter / math / label-Kollisionen)
     for c in ["#", "$", "@", "[", "]", "*", "<", ">", "_"]:
         text = text.replace(c, f"\\{c}")
+    text = text.replace("//", r"\/\/").replace("/*", r"\/\*").replace("*/", r"\*\/")
 
     # 5. Geschützte Tokens wieder einsetzen
     for idx, s in enumerate(strongs):
@@ -771,6 +773,8 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             len(flat_text) <= 300 and
             len(lines_in_para) <= 3 and
             not is_apa_citation(flat_text) and
+            not flat_text.startswith(("http://", "https://", "www.", "doi:")) and
+            not re.match(r"^https?://", flat_text) and
             not any(flat_text.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "weil ", "dass ", "wenn ", "obwohl ", "währenddessen "])
         )
         if is_heading_1:
@@ -787,6 +791,8 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             15 <= len(flat_text) <= 350 and
             len(lines_in_para) <= 4 and
             not is_apa_citation(flat_text) and
+            not flat_text.startswith(("http://", "https://", "www.", "doi:")) and
+            not re.match(r"^https?://", flat_text) and
             not any(flat_text.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "dass "])
         )
         if is_heading_2:
