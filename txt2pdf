@@ -221,22 +221,28 @@ def extract_urls_from_text(text: str) -> List[str]:
             all_urls.append(cleaned_url)
     return all_urls
 
-def resolve_apa_citation(url: str) -> Dict[str, str]:
-    """Löst eine URL oder einen DOI in einen standardkonformen APA-7-Zitationseintrag auf."""
+def investigate_link(url: str) -> Optional[Dict[str, str]]:
+    """Untersucht einen vorliegenden Link (DOI oder URL) und extrahiert normierte Metadaten für das APA-Format."""
     clean_url = clean_url_string(url)
-    
-    # 1. DOI-Erkennung & Crossref API
+    if not clean_url:
+        return None
+
+    # 1. DOI-Erkennung: Content Negotiation via CSL-JSON (universell für Crossref, DataCite, mEDRA etc.)
     doi_match = re.search(r'10\.\d{4,9}/[-._;()/:A-Za-z0-9]+', clean_url)
     if 'doi.org' in clean_url or doi_match:
         doi_str = doi_match.group(0) if doi_match else clean_url.split('doi.org/')[-1]
         try:
-            req_url = f"https://api.crossref.org/works/{urllib.parse.quote(doi_str)}"
-            req = urllib.request.Request(req_url, headers={"User-Agent": "AntigravityAPA/1.0 (mailto:jonathanklatchko@gmail.com)"})
+            req_url = f"https://doi.org/{doi_str}"
+            req = urllib.request.Request(req_url, headers={
+                "Accept": "application/vnd.citationstyles.csl+json",
+                "User-Agent": "AntigravityAPA/1.0 (mailto:jonathanklatchko@gmail.com)"
+            })
             with urllib.request.urlopen(req, timeout=3.5) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
-                item = data.get("message", {})
-                title = (item.get("title") or [""])[0]
-                authors = item.get("author", [])
+                title = data.get("title", "")
+                if data.get("subtitle"):
+                    title = f"{title}: {data['subtitle']}"
+                authors = data.get("author", [])
                 auth_list = []
                 for a in authors[:20]:
                     fam = a.get("family", "")
@@ -252,25 +258,27 @@ def resolve_apa_citation(url: str) -> Dict[str, str]:
                 elif auth_list:
                     auth_str = auth_list[0]
                 else:
-                    auth_str = "O. A."
+                    auth_str = ""
 
-                year = "o. D."
-                if "published-print" in item and "date-parts" in item["published-print"]:
-                    year = str(item["published-print"]["date-parts"][0][0])
-                elif "published-online" in item and "date-parts" in item["published-online"]:
-                    year = str(item["published-online"]["date-parts"][0][0])
+                year = ""
+                if "issued" in data and "date-parts" in data["issued"]:
+                    year = str(data["issued"]["date-parts"][0][0])
 
-                container = (item.get("container-title") or [""])[0]
-                container_str = f" _{escape_typst_line(container)}_." if container else ""
-                
+                publisher = data.get("publisher", "")
+                container = data.get("container-title", "")
+                source_val = container if container else publisher
+
                 return {
-                    "sort_key": auth_str.lower(),
-                    "formatted": f"{escape_typst_line(auth_str)} ({year}). _{escape_typst_line(title)}_{container_str} #link(\"{clean_url}\")[{clean_url}]"
+                    "author": auth_str,
+                    "year": year,
+                    "title": title,
+                    "source": source_val,
+                    "url": clean_url
                 }
         except Exception:
             pass
 
-    # 2. Reguläre Website-Auflösung
+    # 2. Reguläre Website-Untersuchung (HTML Meta-Tags, OpenGraph, Dublin Core, JSON-LD)
     parsed = urllib.parse.urlparse(clean_url)
     domain = re.sub(r"^www\.", "", parsed.netloc.lower())
 
@@ -291,7 +299,10 @@ def resolve_apa_citation(url: str) -> Dict[str, str]:
         "wikipedia.org": "Wikipedia",
         "nature.com": "Nature",
         "thelancet.com": "The Lancet",
-        "arxiv.org": "arXiv"
+        "arxiv.org": "arXiv",
+        "bertelsmann-stiftung.de": "Bertelsmann Stiftung",
+        "mckinsey.de": "McKinsey & Company",
+        "mckinsey.com": "McKinsey & Company"
     }
 
     site_name = inst_map.get(domain, domain.capitalize())
@@ -300,12 +311,14 @@ def resolve_apa_citation(url: str) -> Dict[str, str]:
     year = ""
 
     try:
-        req = urllib.request.Request(clean_url, headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"})
+        req = urllib.request.Request(clean_url, headers={
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+        })
         with urllib.request.urlopen(req, timeout=3.0) as resp:
             content_type = resp.headers.get("Content-Type", "")
             if "html" in content_type or "text" in content_type:
                 html = resp.read(250000).decode("utf-8", errors="replace")
-                
+
                 og_t = re.search(r'<meta[^>]+property=[\'"]og:title[\'"][^>]+content=[\'"](.*?)[\'"]', html, re.I)
                 if og_t:
                     title = og_t.group(1).strip()
@@ -331,23 +344,105 @@ def resolve_apa_citation(url: str) -> Dict[str, str]:
     title = unescape(title)
     if not title:
         path = parsed.path.strip("/")
-        title = path.split("/")[-1].replace("-", " ").replace("_", " ").capitalize() if path else domain
+        last_seg = path.split("/")[-1] if path else domain
+        m_slug_date = re.match(r"^(\d{4})[-_](\d{2})[-_](\d{2})[-_]+(.*)$", last_seg)
+        if m_slug_date:
+            if not year:
+                year = m_slug_date.group(1)
+            last_seg = m_slug_date.group(4)
+        title = last_seg.replace("-", " ").replace("_", " ").capitalize()
 
     title = re.sub(r"\s*[\-|–—|]\s*" + re.escape(site_name) + r".*$", "", title, flags=re.I).strip()
     if not author:
         author = site_name
 
     if not year:
-        url_yr = re.search(r"/(20\d\d)/", clean_url)
+        url_yr = re.search(r"/(20\d\d)(?:[-_/]|$)", clean_url)
         year = url_yr.group(1) if url_yr else "o. D."
 
-    source_part = "" if author.lower() == site_name.lower() else f" _{site_name}_."
+    return {
+        "author": author,
+        "year": year,
+        "title": title,
+        "source": site_name if author.lower() != site_name.lower() else "",
+        "url": clean_url
+    }
 
-    formatted = f"{escape_typst_line(author)}. ({year}). _{escape_typst_line(title)}_{source_part} #link(\"{clean_url}\")[{clean_url}]"
+def format_citation_to_apa_7(raw_citation: str) -> Dict[str, str]:
+    """Wandelt einen Zitationseintrag oder eine URL unter Untersuchung des Links verbindlich in das APA-7-Format um."""
+    clean_raw = raw_citation.strip()
+    if not clean_raw:
+        return {}
+
+    m_url = re.search(r'https?://[^\s<>"\'\[\]]+', clean_raw)
+    url = m_url.group(0).rstrip('.,;:)"\'') if m_url else ""
+    clean_url = clean_url_string(url) if url else ""
+
+    link_meta = investigate_link(clean_url) if clean_url else None
+
+    # Textbestandteil ohne URL bereinigen
+    text_no_url = re.sub(r'https?://[^\s<>"\'\[\]]+', '', clean_raw).strip().rstrip('.,;:')
+
+    author = ""
+    date_str = ""
+    title = ""
+    source = ""
+
+    m_cite = re.match(r'^(.*?)\s*[\(\[]([12]\d{3}[^\)\]]*)[\)\]][\.:]?\s*(.*)$', text_no_url)
+    if m_cite:
+        author = m_cite.group(1).strip().rstrip('.,;:')
+        date_str = m_cite.group(2).strip()
+        rest = m_cite.group(3).strip().rstrip('.,;:')
+
+        # Zerlegung von rest in Titel und optionale Quelle (z. B. "Titel des Berichts. McKinsey & Company")
+        parts = re.split(r'\.\s+(?=[A-ZÄÖÜ])', rest)
+        if len(parts) > 1 and len(parts[-1]) <= 70:
+            title = '. '.join(parts[:-1]).strip().rstrip('.,;:')
+            source = parts[-1].strip().rstrip('.,;:')
+        else:
+            title = rest.strip().rstrip('.,;:')
+
+    # Abgleich mit den Metadaten aus der Link-Untersuchung
+    if link_meta:
+        if link_meta.get("author") and (not author or author.lower() in link_meta.get("source", "").lower() or author.lower() in ["o. a.", "ohne autor"]):
+            if author and author != link_meta["author"] and not source:
+                source = author
+            author = link_meta["author"]
+        if link_meta.get("source") and not source and author.lower() != link_meta["source"].lower():
+            source = link_meta["source"]
+        if not title and link_meta.get("title"):
+            title = link_meta["title"]
+        if not date_str and link_meta.get("year"):
+            date_str = link_meta["year"]
+
+    if not author:
+        author = "O. A."
+    if not date_str:
+        date_str = "o. D."
+    if not title:
+        title = "Ohne Titel"
+
+    author_part = escape_typst_line(author)
+    if not author_part.endswith("."):
+        author_part += "."
+
+    date_part = f"({date_str})."
+
+    clean_title = re.sub(r'^_*(.*?)_*$', r'\1', title).strip().rstrip('.')
+    title_part = f"_{escape_typst_line(clean_title)}._"
+
+    source_part = f" {escape_typst_line(source)}." if source and source.lower() != author.lower() else ""
+    link_part = f' #link("{clean_url}")[{clean_url}]' if clean_url else ""
+
+    formatted = f"{author_part} {date_part} {title_part}{source_part}{link_part}".strip()
     return {
         "sort_key": author.lower(),
         "formatted": formatted
     }
+
+def resolve_apa_citation(url: str) -> Dict[str, str]:
+    """Kompatibilitäts-Wrapper: Löst eine URL oder einen DOI in einen standardkonformen APA-7-Zitationseintrag auf."""
+    return format_citation_to_apa_7(url)
 
 def generate_bibliography_typst(
     urls: List[str] = None,
@@ -358,27 +453,29 @@ def generate_bibliography_typst(
     title_size: str = "10pt"
 ) -> str:
     """Erzeugt das standardkonforme APA-Literaturverzeichnis als einspaltige, linksbündige Extraseite mit anklickbaren Links."""
-    entries_typst = []
+    citations = []
 
     if explicit_entries:
         for entry in explicit_entries:
             clean_entry = entry.strip()
             if clean_entry:
-                entries_typst.append(f"#block(inset: (bottom: 3.5mm))[\n  {clean_entry}\n]")
+                cit = format_citation_to_apa_7(clean_entry)
+                if cit and cit.get("formatted"):
+                    citations.append(cit)
     elif urls:
-        citations = []
         for u in urls:
-            cit = resolve_apa_citation(u)
-            if cit:
+            cit = format_citation_to_apa_7(u)
+            if cit and cit.get("formatted"):
                 citations.append(cit)
 
-        citations.sort(key=lambda c: c["sort_key"])
-
-        for c in citations:
-            entries_typst.append(f"#block(inset: (bottom: 3.5mm))[\n  {c['formatted']}\n]")
-
-    if not entries_typst:
+    if not citations:
         return ""
+
+    citations.sort(key=lambda c: c["sort_key"])
+
+    entries_typst = []
+    for c in citations:
+        entries_typst.append(f"#block(inset: (bottom: 3.5mm))[\n  {c['formatted']}\n]")
 
     body = "\n".join(entries_typst)
 
@@ -576,8 +673,15 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         if in_bibliography_section or is_apa_citation(flat_text):
             in_bibliography_section = True
             has_explicit_bibliography = True
-            escaped_cite = format_content_to_typst(flat_text)
-            explicit_bib_entries.append(escaped_cite)
+            candidate_lines = [l.strip() for l in lines_in_para if l.strip()]
+            has_multiple_citations = len(candidate_lines) > 1 and all(
+                ("http" in l or "doi" in l or is_apa_citation(l)) for l in candidate_lines
+            )
+            if has_multiple_citations:
+                for l in candidate_lines:
+                    explicit_bib_entries.append(l)
+            else:
+                explicit_bib_entries.append(flat_text)
             continue
 
         # 8. Versalien-Überschriften (ALL CAPS / Großbuchstaben)
