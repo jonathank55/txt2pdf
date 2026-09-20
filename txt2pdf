@@ -132,12 +132,12 @@ def apply_initial_to_typst_element(content: str) -> str:
         return s
     return f"#dropcap(\n  height: 3,\n  gap: 2pt,\n  justify: true,\n)[{s}]"
 
-def is_single_sentence(text: str) -> bool:
-    """Erkennt deterministisch, ob ein Absatz aus genau einem Satz mit Punkt am Ende besteht."""
+def is_one_or_two_sentences(text: str) -> bool:
+    """Erkennt deterministisch, ob ein Absatz aus 1 bis 2 Sätzen mit Punkt am Ende besteht."""
     s = text.strip()
     if not s.endswith((".", "!", "?")):
         return False
-    if len(s) < 10 or len(s) > 350:
+    if len(s) < 10 or len(s) > 500:
         return False
     # Entferne bekannte gängige Abkürzungen temporär für die Satzgrenzenprüfung
     clean = re.sub(
@@ -147,8 +147,10 @@ def is_single_sentence(text: str) -> bool:
         flags=re.IGNORECASE
     )
     inner = clean[:-1].strip()
-    has_internal_sentence = bool(re.search(r"[\.\!\?]\s+[A-ZÄÖÜ]", inner))
-    return not has_internal_sentence
+    internal_boundaries = re.findall(r"[\.\!\?]\s+[A-ZÄÖÜ]", inner)
+    return len(internal_boundaries) <= 1
+
+is_single_sentence = is_one_or_two_sentences
 
 def is_author_name(candidate: str) -> bool:
     """Prüft zuverlässig, ob eine Zeichenkette den Namen einer realen Person / Autors darstellt."""
@@ -793,11 +795,11 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             )
             continue
 
-        # 10b. Überschrift 2: Ein Satz MIT Punkt am Ende (Blocktext & Fett)
+        # 10b. Überschrift 2: 1-2 Sätze MIT Punkt am Ende (Blocktext & Fett)
         is_heading_2 = (
-            is_single_sentence(flat_text) and
-            15 <= len(flat_text) <= 350 and
-            len(lines_in_para) <= 4 and
+            is_one_or_two_sentences(flat_text) and
+            15 <= len(flat_text) <= 500 and
+            len(lines_in_para) <= 6 and
             not is_apa_citation(flat_text) and
             not flat_text.startswith(("http://", "https://", "www.", "doi:")) and
             not re.match(r"^https?://", flat_text) and
@@ -1174,10 +1176,10 @@ def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_autho
             not any(p_plain_clean.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "weil ", "dass ", "wenn ", "obwohl "])
         )
 
-        # Überschrift 2: Ein Satz MIT Punkt am Ende (Blocktext & Fett)
+        # Überschrift 2: 1-2 Sätze MIT Punkt am Ende (Blocktext & Fett)
         is_heading_2 = (
-            is_single_sentence(p_plain_clean) and
-            15 <= len(p_plain_clean) <= 350 and
+            is_one_or_two_sentences(p_plain_clean) and
+            15 <= len(p_plain_clean) <= 500 and
             not is_apa_citation(p_plain_clean) and
             not any(p_plain_clean.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "dass "])
         )
