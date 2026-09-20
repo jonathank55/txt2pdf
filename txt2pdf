@@ -410,9 +410,54 @@ def investigate_link(url: str) -> Optional[Dict[str, str]]:
                 if auth_m:
                     author = auth_m.group(1).strip()
 
-                date_m = re.search(r'<meta[^>]+property=[\'"](?:article:published_time|og:published_time)[\'"][^>]+content=[\'"](\d{4})', html, re.I)
-                if date_m:
-                    year = date_m.group(1)
+                # 1. JSON-LD / Schema.org (datePublished, dateCreated, dateModified)
+                m_json_date = re.search(r'["\'](?:datePublished|dateCreated|dateModified|uploadDate)["\']\s*:\s*["\'](\d{4})', html, re.I)
+                if m_json_date:
+                    year = m_json_date.group(1)
+
+                # 2. Erweiterte Meta-Tags (OpenGraph, DublinCore, News)
+                if not year:
+                    meta_date_patterns = [
+                        r'<meta[^>]+(?:name|property|itemprop)=[\'"](?:article:published_time|og:published_time|date|pubdate|publishdate|dc\.date|dc\.date\.issued|dc\.date\.created|sailthru\.date|parsely-pub-date|article:modified_time|og:updated_time)[\'"][^>]+content=[\'"](\d{4})',
+                        r'<meta[^>]+content=[\'"](\d{4})[^>]*[\'"][^>]+(?:name|property|itemprop)=[\'"](?:article:published_time|og:published_time|date|pubdate|publishdate|dc\.date)[\'"]'
+                    ]
+                    for pat in meta_date_patterns:
+                        m_m = re.search(pat, html, re.I)
+                        if m_m:
+                            year = m_m.group(1)
+                            break
+
+                # 3. HTML5 Time-Tags
+                if not year:
+                    m_time = re.search(r'<time[^>]+datetime=[\'"](\d{4})', html, re.I)
+                    if m_time:
+                        year = m_time.group(1)
+                    else:
+                        m_time_txt = re.search(r'<time[^>]*>[^<]*?\b(20\d{2})\b[^<]*?</time>', html, re.I)
+                        if m_time_txt:
+                            year = m_time_txt.group(1)
+
+                # 4. Textdaten im HTML-Körper (Deutsch und Englisch)
+                if not year:
+                    m_de_date = re.search(
+                        r'\b\d{1,2}\.?\s*(?:Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember|Jan|Feb|Mär|Apr|Mai|Jun|Jul|Aug|Sep|Okt|Nov|Dez)\.?\s*(20\d{2})\b',
+                        html, re.I
+                    )
+                    if m_de_date:
+                        year = m_de_date.group(1)
+                    else:
+                        m_en_date = re.search(
+                            r'\b(?:(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s*(20\d{2})|\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+(20\d{2}))\b',
+                            html, re.I
+                        )
+                        if m_en_date:
+                            year = m_en_date.group(1) or m_en_date.group(2)
+
+                # 5. Explizites deutsches oder ISO-Datum
+                if not year:
+                    m_iso = re.search(r'\b(?:Stand:?\s*|Datum:?\s*|Veröffentlicht:?\s*)?(?:(20\d{2})[-/.](?:0[1-9]|1[0-2])[-/.](?:0[1-9]|[12]\d|3[01])|(?:0[1-9]|[12]\d|3[01])\.(?:0[1-9]|1[0-2])\.(20\d{2}))\b', html, re.I)
+                    if m_iso:
+                        year = m_iso.group(1) or m_iso.group(2)
     except Exception:
         pass
 
@@ -433,7 +478,8 @@ def investigate_link(url: str) -> Optional[Dict[str, str]]:
 
     if not year:
         url_yr = re.search(r"/(20\d\d)(?:[-_/]|$)", clean_url)
-        year = url_yr.group(1) if url_yr else "o. D."
+        if url_yr:
+            year = url_yr.group(1)
 
     return {
         "author": author,
@@ -443,10 +489,82 @@ def investigate_link(url: str) -> Optional[Dict[str, str]]:
         "url": clean_url
     }
 
-def format_citation_to_apa_7(raw_citation: str) -> Dict[str, str]:
+def find_date_in_context(raw_citation: str, clean_url: str, link_meta: dict, context_text: str) -> Optional[str]:
+    """Findet deterministisch ein plausibles Publikations- oder Referenzdatum im Dokumententext zur zitierten Quelle."""
+    if not context_text or not context_text.strip():
+        return None
+
+    search_terms = []
+    if clean_url:
+        parsed = urllib.parse.urlparse(clean_url)
+        for part in parsed.netloc.lower().replace("www.", "").split("."):
+            if len(part) >= 4 and part not in ("com", "org", "net", "de", "edu", "info", "html"):
+                search_terms.append(part.lower())
+        for slug in re.findall(r"[A-Za-z0-9äöüÄÖÜß]{4,}", parsed.path):
+            if slug.lower() not in ("detail", "news", "html", "index", "article", "tarif", "faq"):
+                search_terms.append(slug.lower())
+
+    if link_meta:
+        for fld in ("author", "source", "title"):
+            val = link_meta.get(fld, "")
+            if val and val not in ("O. A.", "Ohne Autor"):
+                for w in re.findall(r"[A-Za-z0-9äöüÄÖÜß]{4,}", val):
+                    w_l = w.lower()
+                    if w_l not in ("software", "gmbh", "redaktion", "verband"):
+                        search_terms.append(w_l)
+
+    for w in re.findall(r"[A-Za-z0-9äöüÄÖÜß]{4,}", raw_citation):
+        w_low = w.lower()
+        if not w_low.startswith("http") and w_low not in ("https", "quellen", "quelle", "literatur", "references", "works", "cited"):
+            search_terms.append(w_low)
+
+    search_terms = list(dict.fromkeys(search_terms))
+    if not search_terms:
+        return None
+
+    paras = [p.strip() for p in context_text.split("\n\n") if p.strip()]
+    matched_paras_with_index = []
+
+    for idx, p in enumerate(paras):
+        p_low = p.lower()
+        score = sum(1 for term in search_terms if term in p_low)
+        if score > 0:
+            matched_paras_with_index.append((score, idx, p))
+
+    matched_paras_with_index.sort(key=lambda x: x[0], reverse=True)
+
+    date_regex_priority = [
+        re.compile(r'\b(?:aus\s+dem|vom|im\s+Jahr(?:e)?|im|Stand:?)\s*(?:(?:Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember|Jan|Feb|Mär|Apr|Mai|Jun|Jul|Aug|Sep|Okt|Nov|Dez)\.?\s+)?(20\d{2})\b', re.I),
+        re.compile(r'\b(?:Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+(20\d{2})\b', re.I),
+        re.compile(r'\b(20(?:1[5-9]|2[0-9]|3[0-5]))\b')
+    ]
+
+    for score, idx, p in matched_paras_with_index:
+        for reg in date_regex_priority:
+            m = reg.search(p)
+            if m:
+                return m.group(1)
+        if idx > 0:
+            prev_p = paras[idx - 1]
+            for reg in date_regex_priority:
+                m = reg.search(prev_p)
+                if m:
+                    return m.group(1)
+
+    return None
+
+def format_citation_to_apa_7(raw_citation: str, context_text: str = "") -> Dict[str, str]:
     """Wandelt einen Zitationseintrag oder eine URL unter Untersuchung des Links verbindlich in das APA-7-Format um."""
     clean_raw = raw_citation.strip()
     if not clean_raw:
+        return {}
+
+    # Header-Fragmente und isolierte Verzeichnis-Begriffe verwerfen
+    bib_header_check = re.compile(
+        r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library|Verzeichnis)\b:?\s*$",
+        re.IGNORECASE
+    )
+    if bib_header_check.match(clean_raw):
         return {}
 
     m_url = re.search(r'https?://[^\s<>"\'\[\]]+', clean_raw)
@@ -458,12 +576,21 @@ def format_citation_to_apa_7(raw_citation: str) -> Dict[str, str]:
     # Textbestandteil ohne URL bereinigen
     text_no_url = re.sub(r'https?://[^\s<>"\'\[\]]+', '', clean_raw).strip().rstrip('.,;:')
 
+    if bib_header_check.match(text_no_url):
+        return {}
+
     author = ""
     date_str = ""
     title = ""
     source = ""
 
     m_cite = re.match(r'^(.*?)\s*[\(\[]([12]\d{3}[^\)\]]*)[\)\]][\.:]?\s*(.*)$', text_no_url)
+
+    # Ohne URL und ohne Zitationsformat muss der Text substantielle Informationen enthalten
+    if not clean_url and not m_cite:
+        if len(text_no_url) < 15 or len(text_no_url.split()) < 3:
+            return {}
+
     if m_cite:
         author = m_cite.group(1).strip().rstrip('.,;:')
         date_str = m_cite.group(2).strip()
@@ -490,6 +617,12 @@ def format_citation_to_apa_7(raw_citation: str) -> Dict[str, str]:
         if not date_str and link_meta.get("year"):
             date_str = link_meta["year"]
 
+    # Falls immer noch kein Datum vorliegt (oder "o. D."): Im Dokumentenkontext suchen!
+    if not date_str or date_str in ("o. D.", "n.d."):
+        ctx_date = find_date_in_context(clean_raw, clean_url, link_meta, context_text)
+        if ctx_date:
+            date_str = ctx_date
+
     if not author:
         author = "O. A."
     if not date_str:
@@ -515,9 +648,9 @@ def format_citation_to_apa_7(raw_citation: str) -> Dict[str, str]:
         "formatted": formatted
     }
 
-def resolve_apa_citation(url: str) -> Dict[str, str]:
+def resolve_apa_citation(url: str, context_text: str = "") -> Dict[str, str]:
     """Kompatibilitäts-Wrapper: Löst eine URL oder einen DOI in einen standardkonformen APA-7-Zitationseintrag auf."""
-    return format_citation_to_apa_7(url)
+    return format_citation_to_apa_7(url, context_text=context_text)
 
 def generate_bibliography_typst(
     urls: List[str] = None,
@@ -525,7 +658,8 @@ def generate_bibliography_typst(
     bib_title: str = "Literaturverzeichnis",
     font_spec: str = '("PT Serif", "EB Garamond", "Times New Roman", "Times")',
     font_size: str = "8pt",
-    title_size: str = "10pt"
+    title_size: str = "10pt",
+    context_text: str = ""
 ) -> str:
     """Erzeugt das standardkonforme APA-Literaturverzeichnis als einspaltige, linksbündige Extraseite mit anklickbaren Links."""
     citations = []
@@ -544,7 +678,7 @@ def generate_bibliography_typst(
                 raw_candidates.append(s_u)
 
     for item in raw_candidates:
-        cit = format_citation_to_apa_7(item)
+        cit = format_citation_to_apa_7(item, context_text=context_text)
         if cit and cit.get("formatted"):
             norm_f = cit["formatted"].strip().lower()
             if norm_f not in seen_formatted:
@@ -612,11 +746,11 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
     all_urls = extract_urls_from_text(full_raw_text)
 
     bib_header_exact_regex = re.compile(
-        r"^(?:Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography|Library):?\s*$",
+        r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library)\b:?\s*$",
         re.IGNORECASE
     )
     bib_header_prefix_regex = re.compile(
-        r"^(Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography|Library):?\s+(.+)$",
+        r"^(Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library)\b:?\s+(.+)$",
         re.IGNORECASE
     )
 
@@ -669,8 +803,8 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
     numbered_header_regex = re.compile(r"^(\d+(?:\.\d+)*[\.:\)]\s+[A-ZÄÖÜ].*)$")
     roman_header_regex = re.compile(r"^([IVXLCDM]+[\.:\)]\s+[A-ZÄÖÜ].*)$")
     alpha_header_regex = re.compile(r"^([A-Z]\.\s+[A-ZÄÖÜ].*)$")
-    bib_header_regex = re.compile(r"^(?:Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography|Library):?\s*$", re.IGNORECASE)
-    bib_header_inline_regex = re.compile(r"^(?:Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography|Library):?\s*(.*)$", re.IGNORECASE)
+    bib_header_regex = re.compile(r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library)\b:?\s*$", re.IGNORECASE)
+    bib_header_inline_regex = re.compile(r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library)\b:?\s*(.*)$", re.IGNORECASE)
 
     for i, para in enumerate(paragraphs):
         lines_in_para = para.splitlines()
@@ -796,7 +930,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                 if candidate_urls:
                     for cu in candidate_urls:
                         explicit_bib_entries.append(cu.strip())
-                else:
+                elif len(remainder) >= 15 and not bib_header_exact_regex.match(remainder):
                     explicit_bib_entries.append(remainder)
             continue
 
@@ -806,6 +940,8 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             has_explicit_bibliography = True
             candidate_lines = [l.strip() for l in lines_in_para if l.strip()]
             for l in candidate_lines:
+                if bib_header_exact_regex.match(l):
+                    continue
                 urls_in_line = re.findall(r"https?://[^\s<>\"\'\[\]]+|\bdoi:\s*10\.\d{4,9}/[^\s<>\"\'\[\]]+|\b10\.\d{4,9}/[^\s<>\"\'\[\]]+", l)
                 if urls_in_line and (len(urls_in_line) > 1 or is_all_urls):
                     for single_u in urls_in_line:
@@ -1161,7 +1297,7 @@ def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_autho
     first_body_para_done = False
     in_bib_section = False
     has_explicit_bib = False
-    bib_header_regex = re.compile(r"^(?:Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography):?\s*$", re.IGNORECASE)
+    bib_header_regex = re.compile(r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library)\b:?\s*$", re.IGNORECASE)
 
     for idx, p in enumerate(paras):
         content = re.sub(r'\](?=\()', r']\\', p['typst'])
@@ -1194,7 +1330,7 @@ def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_autho
         ))
 
         m_bib_rtf = re.match(
-            r"^(?:Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography|Library):?\s*(.*)$",
+            r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library)\b:?\s*(.*)$",
             p_plain_clean,
             re.IGNORECASE
         )
@@ -1208,11 +1344,13 @@ def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_autho
                 bib_heading_title = first_w_rtf
 
             rem_rtf = m_bib_rtf.group(1).strip()
-            if rem_rtf:
+            if rem_rtf and (len(rem_rtf) >= 15 or re.search(r'https?://|\b10\.\d{4,9}/', rem_rtf)):
                 rtf_bib_entries.append(rem_rtf)
             continue
 
         if in_bib_section or is_apa_citation(p_plain_clean) or is_all_urls_rtf:
+            if bib_header_regex.match(p_plain_clean):
+                continue
             in_bib_section = True
             has_explicit_bib = True
             rtf_bib_entries.append(content)
@@ -1559,7 +1697,7 @@ def convert_txt_to_apa_standalone(
             in_bib = True
             rem_bib = m_bib_header.group(1).strip()
             if rem_bib:
-                cit_data = format_citation_to_apa_7(rem_bib)
+                cit_data = format_citation_to_apa_7(rem_bib, context_text=raw_content)
                 if cit_data and cit_data.get("formatted"):
                     bib_entries.append(f"#block(spacing: 1.2em)[\n  #set par(hanging-indent: 12.7mm, first-line-indent: 0pt, justify: false)\n  {cit_data['formatted']}\n]")
                 else:
@@ -1573,14 +1711,14 @@ def convert_txt_to_apa_standalone(
             urls_in_para = re.findall(r"https?://[^\s<>\"\'\[\]]+|\bdoi:\s*10\.\d{4,9}/[^\s<>\"\'\[\]]+|\b10\.\d{4,9}/[^\s<>\"\'\[\]]+", flat)
             if urls_in_para and (len(urls_in_para) > 1 or is_all_urls):
                 for single_u in urls_in_para:
-                    cit_data = format_citation_to_apa_7(single_u.strip())
+                    cit_data = format_citation_to_apa_7(single_u.strip(), context_text=raw_content)
                     if cit_data and cit_data.get("formatted"):
                         bib_entries.append(f"#block(spacing: 1.2em)[\n  #set par(hanging-indent: 12.7mm, first-line-indent: 0pt, justify: false)\n  {cit_data['formatted']}\n]")
                     else:
                         esc_cite = format_content_to_typst(single_u.strip())
                         bib_entries.append(f"#block(spacing: 1.2em)[\n  #set par(hanging-indent: 12.7mm, first-line-indent: 0pt, justify: false)\n  {esc_cite}\n]")
             else:
-                cit_data = format_citation_to_apa_7(flat)
+                cit_data = format_citation_to_apa_7(flat, context_text=raw_content)
                 if cit_data and cit_data.get("formatted"):
                     bib_entries.append(f"#block(spacing: 1.2em)[\n  #set par(hanging-indent: 12.7mm, first-line-indent: 0pt, justify: false)\n  {cit_data['formatted']}\n]")
                 else:
@@ -1851,13 +1989,16 @@ def convert_txt_to_pdf(
     default_bib_title = "References" if lang == "en" else "Literaturverzeichnis"
     final_bib_title = bib_heading_title if bib_heading_title else default_bib_title
 
+    raw_doc_context = raw_content if not is_rtf else " ".join(plain_paragraphs if 'plain_paragraphs' in locals() else [])
+
     bibliography_typst = generate_bibliography_typst(
         urls=urls,
         explicit_entries=explicit_bib_entries,
         bib_title=final_bib_title,
         font_spec=font_spec,
         font_size=final_font_size,
-        title_size=title_size
+        title_size=title_size,
+        context_text=raw_doc_context
     )
 
     author_block = ""
