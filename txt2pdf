@@ -132,6 +132,23 @@ def apply_initial_to_typst_element(content: str) -> str:
         return s
     return f"#dropcap(\n  height: 3,\n  gap: 2pt,\n  justify: true,\n)[{s}]"
 
+def is_single_sentence(text: str) -> bool:
+    """Erkennt deterministisch, ob ein Absatz aus genau 1 Satz mit Punkt am Ende besteht."""
+    s = text.strip()
+    if not s.endswith((".", "!", "?")):
+        return False
+    if len(s) < 10 or len(s) > 350:
+        return False
+    clean = re.sub(
+        r"\b(?:z\. B\.|d\. h\.|u\. a\.|u\. ä\.|bzw\.|ca\.|evtl\.|inkl\.|Dr\.|Prof\.|Hr\.|Fr\.|Nr\.|Abs\.|Art\.|Vgl\.|vgl\.|S\.|ff\.|etc\.|e\.g\.|i\.e\.)",
+        "ABBR",
+        s,
+        flags=re.IGNORECASE
+    )
+    inner = clean[:-1].strip()
+    internal_boundaries = re.findall(r"[\.\!\?]\s+[A-ZÄÖÜ]", inner)
+    return len(internal_boundaries) == 0
+
 def is_one_or_two_sentences(text: str) -> bool:
     """Erkennt deterministisch, ob ein Absatz aus 1 bis 2 Sätzen mit Punkt am Ende besteht."""
     s = text.strip()
@@ -149,8 +166,6 @@ def is_one_or_two_sentences(text: str) -> bool:
     inner = clean[:-1].strip()
     internal_boundaries = re.findall(r"[\.\!\?]\s+[A-ZÄÖÜ]", inner)
     return len(internal_boundaries) <= 1
-
-is_single_sentence = is_one_or_two_sentences
 
 def is_author_name(candidate: str) -> bool:
     """Prüft zuverlässig, ob eine Zeichenkette den Namen einer realen Person / Autors darstellt."""
@@ -993,11 +1008,23 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             )
             continue
 
-        # 10b. Überschrift 2: 1-2 Sätze MIT Punkt am Ende (Blocktext & Fett)
+        # 10b. Überschrift 2:
+        # NUR AM ANFANG: 1-2 Sätze mit Punkt am Ende
+        # ÜBERALL ANDERS: Genau 1 Satz mit Punkt am Ende
+        is_at_beginning = not first_body_para_done
+        if is_at_beginning:
+            valid_sentence_structure = is_one_or_two_sentences(flat_text)
+            max_len = 500
+            max_lines = 6
+        else:
+            valid_sentence_structure = is_single_sentence(flat_text)
+            max_len = 350
+            max_lines = 3
+
         is_heading_2 = (
-            is_one_or_two_sentences(flat_text) and
-            15 <= len(flat_text) <= 500 and
-            len(lines_in_para) <= 6 and
+            valid_sentence_structure and
+            15 <= len(flat_text) <= max_len and
+            len(lines_in_para) <= max_lines and
             not is_apa_citation(flat_text) and
             not flat_text.startswith(("http://", "https://", "www.", "doi:")) and
             not re.match(r"^https?://", flat_text) and
@@ -1394,10 +1421,20 @@ def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_autho
             not any(p_plain_clean.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "weil ", "dass ", "wenn ", "obwohl "])
         )
 
-        # Überschrift 2: 1-2 Sätze MIT Punkt am Ende (Blocktext & Fett)
+        # Überschrift 2:
+        # NUR AM ANFANG: 1-2 Sätze mit Punkt am Ende
+        # ÜBERALL ANDERS: Genau 1 Satz mit Punkt am Ende
+        is_at_beginning_rtf = not first_body_para_done
+        if is_at_beginning_rtf:
+            valid_sentence_rtf = is_one_or_two_sentences(p_plain_clean)
+            max_len_rtf = 500
+        else:
+            valid_sentence_rtf = is_single_sentence(p_plain_clean)
+            max_len_rtf = 350
+
         is_heading_2 = (
-            is_one_or_two_sentences(p_plain_clean) and
-            15 <= len(p_plain_clean) <= 500 and
+            valid_sentence_rtf and
+            15 <= len(p_plain_clean) <= max_len_rtf and
             not is_apa_citation(p_plain_clean) and
             not any(p_plain_clean.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "dass "])
         )
