@@ -311,6 +311,107 @@ def extract_urls_from_text(text: str) -> List[str]:
             all_urls.append(cleaned_url)
     return all_urls
 
+def parse_author_name_to_apa(raw_name: str) -> str:
+    """Wandelt einen Personennamen deterministisch in das standardisierte APA-Format (Nachname, Initialen) um."""
+    s = unescape(raw_name).strip().rstrip(".,;:")
+    # Titel und akademische Grade bereinigen
+    s = re.sub(r"^(?:Prof\.|Dr\.|PD|Dipl\.-[A-Za-z]+|M\.Sc\.|B\.Sc\.|Dr\. med\.)\s+", "", s, flags=re.I).strip()
+    if not s:
+        return ""
+    if "," in s:
+        parts = [p.strip() for p in s.split(",", 1)]
+        last = parts[0]
+        first = parts[1]
+        first_tokens = [t for t in first.split() if t and not t.endswith(".")]
+        first_inits = [t for t in first.split() if t and t.endswith(".")]
+        inits = " ".join([f"{t[0]}." for t in first_tokens] + first_inits)
+        return f"{last}, {inits}".strip()
+    tokens = s.split()
+    if len(tokens) == 1:
+        return tokens[0]
+    prefixes = {"an", "der", "von", "van", "de", "den", "zu", "ter", "vom", "di", "del", "da"}
+    if len(tokens) >= 3 and tokens[-3].lower() in prefixes:
+        last = " ".join(tokens[-3:])
+        first_tokens = tokens[:-3]
+    elif len(tokens) >= 2 and tokens[-2].lower() in prefixes:
+        last = " ".join(tokens[-2:])
+        first_tokens = tokens[:-2]
+    else:
+        last = tokens[-1]
+        first_tokens = tokens[:-1]
+    inits = " ".join(f"{t[0]}." for t in first_tokens if t)
+    return f"{last}, {inits}".strip()
+
+def format_authors_apa(authors_list: List[str]) -> str:
+    """Verbindet eine Liste von Autorennamen standardkonform nach APA 7."""
+    cleaned = []
+    seen = set()
+    for a in authors_list:
+        apa = parse_author_name_to_apa(a)
+        if apa and apa.lower() not in seen:
+            seen.add(apa.lower())
+            cleaned.append(apa)
+    if not cleaned:
+        return ""
+    if len(cleaned) == 1:
+        return cleaned[0]
+    if len(cleaned) <= 20:
+        return ", ".join(cleaned[:-1]) + " & " + cleaned[-1]
+    return ", ".join(cleaned[:19]) + ", ... " + cleaned[-1]
+
+def extract_authors_from_json_ld(html_text: str) -> List[str]:
+    """Extrahiert Autorennamen aus eingebetteten JSON-LD / Schema.org Datenblöcken."""
+    authors = []
+    scripts = re.findall(r"<script[^>]+type=[\'\"]application/ld\+json[\'\"][^>]*>(.*?)</script>", html_text, re.I | re.S)
+    for s in scripts:
+        try:
+            data = json.loads(s.strip())
+            items = data if isinstance(data, list) else [data]
+            for item in items:
+                auth = item.get("author") or item.get("creator")
+                if isinstance(auth, list):
+                    for a in auth:
+                        if isinstance(a, dict) and a.get("name"):
+                            authors.append(a["name"])
+                        elif isinstance(a, str):
+                            authors.append(a)
+                elif isinstance(auth, dict) and auth.get("name"):
+                    authors.append(auth["name"])
+                elif isinstance(auth, str):
+                    authors.append(auth)
+        except Exception:
+            pass
+    return authors
+
+def extract_authors_from_html(html_text: str) -> List[str]:
+    """Extrahiert alle Personenautoren aus Dublin Core, Highwire Press, Standard-Meta und JSON-LD."""
+    authors = []
+    seen = set()
+
+    for a in extract_authors_from_json_ld(html_text):
+        a_clean = a.strip()
+        if a_clean and a_clean.lower() not in seen:
+            seen.add(a_clean.lower())
+            authors.append(a_clean)
+
+    meta_patterns = [
+        r"<meta[^>]+(?:name|property)=[\'\"](?:citation_author|dc\.creator|author|article:author|dc\.contributor\.author|byl|sailthru\.author|parsely-author)[\'\"][^>]+content=[\'\"]([^\'\"]+)[\'\"]",
+        r"<meta[^>]+content=[\'\"]([^\'\"]+)[\'\"][^>]+(?:name|property)=[\'\"](?:citation_author|dc\.creator|author|article:author|dc\.contributor\.author)[\'\"]"
+    ]
+    for pat in meta_patterns:
+        for m in re.finditer(pat, html_text, re.I):
+            val = unescape(m.group(1)).strip()
+            if ";" in val:
+                subs = [sp.strip() for sp in val.split(";") if sp.strip()]
+            else:
+                subs = [val]
+            for sp in subs:
+                if sp and sp.lower() not in seen and len(sp) <= 80:
+                    if not any(stop in sp.lower() for stop in ["redaktion", "admin", "editorial", "team", "verlag", "press"]):
+                        seen.add(sp.lower())
+                        authors.append(sp)
+    return authors
+
 def investigate_link(url: str) -> Optional[Dict[str, str]]:
     """Untersucht einen vorliegenden Link (DOI oder URL) und extrahiert normierte Metadaten für das APA-Format."""
     clean_url = clean_url_string(url)
@@ -327,7 +428,7 @@ def investigate_link(url: str) -> Optional[Dict[str, str]]:
                 "Accept": "application/vnd.citationstyles.csl+json",
                 "User-Agent": "AntigravityAPA/1.0 (mailto:jonathanklatchko@gmail.com)"
             })
-            with urllib.request.urlopen(req, timeout=3.5) as resp:
+            with urllib.request.urlopen(req, timeout=4.0) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 title = data.get("title", "")
                 if data.get("subtitle"):
@@ -337,12 +438,22 @@ def investigate_link(url: str) -> Optional[Dict[str, str]]:
                 for a in authors[:20]:
                     fam = a.get("family", "")
                     giv = a.get("given", "")
-                    init = f"{giv[0]}." if giv else ""
                     if fam:
+                        init = f"{giv[0]}." if giv else ""
                         auth_list.append(f"{fam}, {init}".strip())
+                    elif a.get("name") or a.get("literal"):
+                        lit = (a.get("name") or a.get("literal")).strip()
+                        is_org = any(w in lit.lower() for w in ["institut", "institute", "organization", "organisation", "gmbh", "association", "office", "rki", "who", "bundesamt", "center", "centre"])
+                        if not is_org and (" " in lit or "," in lit):
+                            apa_lit = parse_author_name_to_apa(lit)
+                            if apa_lit:
+                                auth_list.append(apa_lit)
+
                 if len(authors) > 20:
                     last = authors[-1]
-                    auth_str = ", ".join(auth_list[:19]) + ", ... " + f"{last.get('family', '')}, {last.get('given', '')[0]}."
+                    last_fam = last.get('family', '')
+                    last_init = f"{last.get('given', '')[0]}." if last.get('given') else ""
+                    auth_str = ", ".join(auth_list[:19]) + ", ... " + f"{last_fam}, {last_init}".strip()
                 elif len(auth_list) > 1:
                     auth_str = ", ".join(auth_list[:-1]) + " & " + auth_list[-1]
                 elif auth_list:
@@ -357,6 +468,26 @@ def investigate_link(url: str) -> Optional[Dict[str, str]]:
                 publisher = data.get("publisher", "")
                 container = data.get("container-title", "")
                 source_val = container if container else publisher
+                landing_url = data.get("URL") or req_url
+
+                # FALLS CSL-JSON keinen eindeutigen Personen-Autor liefern konnte:
+                # Untersuche die Zielseite (Landing-Page) der DOI auf Autoren-Metatags (Dublin Core, Highwire Press, etc.)!
+                if not auth_str:
+                    try:
+                        req_page = urllib.request.Request(landing_url, headers={
+                            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+                        })
+                        with urllib.request.urlopen(req_page, timeout=4.0) as resp_page:
+                            html_page = resp_page.read(300000).decode("utf-8", errors="replace")
+                            page_authors = extract_authors_from_html(html_page)
+                            if page_authors:
+                                auth_str = format_authors_apa(page_authors)
+                            if not year:
+                                m_yr = re.search(r'\b(20\d{2})\b', html_page)
+                                if m_yr:
+                                    year = m_yr.group(1)
+                    except Exception:
+                        pass
 
                 return {
                     "author": auth_str,
@@ -404,7 +535,7 @@ def investigate_link(url: str) -> Optional[Dict[str, str]]:
         req = urllib.request.Request(clean_url, headers={
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
         })
-        with urllib.request.urlopen(req, timeout=3.0) as resp:
+        with urllib.request.urlopen(req, timeout=4.0) as resp:
             content_type = resp.headers.get("Content-Type", "")
             if "html" in content_type or "text" in content_type:
                 html = resp.read(250000).decode("utf-8", errors="replace")
@@ -421,9 +552,13 @@ def investigate_link(url: str) -> Optional[Dict[str, str]]:
                 if og_s:
                     site_name = og_s.group(1).strip()
 
-                auth_m = re.search(r'<meta[^>]+name=[\'"]author[\'"][^>]+content=[\'"](.*?)[\'"]', html, re.I)
-                if auth_m:
-                    author = auth_m.group(1).strip()
+                html_authors = extract_authors_from_html(html)
+                if html_authors:
+                    author = format_authors_apa(html_authors)
+                else:
+                    auth_m = re.search(r'<meta[^>]+name=[\'"]author[\'"][^>]+content=[\'"](.*?)[\'"]', html, re.I)
+                    if auth_m:
+                        author = format_authors_apa([auth_m.group(1).strip()])
 
                 # 1. JSON-LD / Schema.org (datePublished, dateCreated, dateModified)
                 m_json_date = re.search(r'["\'](?:datePublished|dateCreated|dateModified|uploadDate)["\']\s*:\s*["\'](\d{4})', html, re.I)
@@ -568,6 +703,47 @@ def find_date_in_context(raw_citation: str, clean_url: str, link_meta: dict, con
 
     return None
 
+def find_author_in_context(raw_citation: str, clean_url: str, link_meta: dict, context_text: str) -> Optional[str]:
+    """Findet deterministisch Personenautoren im Dokumententext zur zitierten Quelle."""
+    if not context_text or not context_text.strip():
+        return None
+
+    search_terms = []
+    if clean_url:
+        parsed = urllib.parse.urlparse(clean_url)
+        for part in parsed.netloc.lower().replace("www.", "").split("."):
+            if len(part) >= 4 and part not in ("com", "org", "net", "de", "edu", "info", "html"):
+                search_terms.append(part.lower())
+        for slug in re.findall(r"[A-Za-z0-9äöüÄÖÜß]{4,}", parsed.path):
+            if slug.lower() not in ("detail", "news", "html", "index", "article", "tarif", "faq"):
+                search_terms.append(slug.lower())
+
+    if link_meta:
+        for fld in ("title", "source"):
+            val = link_meta.get(fld, "")
+            if val:
+                for w in re.findall(r"[A-Za-z0-9äöüÄÖÜß]{4,}", val):
+                    w_l = w.lower()
+                    if w_l not in ("mortalität", "deutschland", "studie", "bericht", "bundesamt", "institut"):
+                        search_terms.append(w_l)
+
+    search_terms = list(dict.fromkeys(search_terms))
+    if not search_terms:
+        return None
+
+    paras = [p.strip() for p in context_text.split("\n\n") if p.strip()]
+    for p in paras:
+        p_low = p.lower()
+        if any(t in p_low for t in search_terms):
+            m_auth = re.search(r'\b(?:von|by)\s+([A-ZÄÖÜ][a-zäöüß]+(?:\s+[A-ZÄÖÜ][a-zäöüß]+)*(?:\s+(?:und|and|&)\s+[A-ZÄÖÜ][a-zäöüß]+(?:\s+[A-ZÄÖÜ][a-zäöüß]+)*)?)\b', p)
+            if m_auth:
+                raw_found = m_auth.group(1).strip()
+                tokens = re.split(r'\s+(?:und|and|&)\s+', raw_found)
+                res_apa = format_authors_apa(tokens)
+                if res_apa:
+                    return res_apa
+    return None
+
 def format_citation_to_apa_7(raw_citation: str, context_text: str = "") -> Dict[str, str]:
     """Wandelt einen Zitationseintrag oder eine URL unter Untersuchung des Links verbindlich in das APA-7-Format um."""
     clean_raw = raw_citation.strip()
@@ -644,6 +820,12 @@ def format_citation_to_apa_7(raw_citation: str, context_text: str = "") -> Dict[
         ctx_tokens = set(re.findall(r"\b[a-z]+\b", context_text.lower()))
         if len(ctx_tokens.intersection(en_words)) >= 4:
             is_en_doc = True
+
+    # Falls immer noch kein Autor vorliegt (oder "O. A." / "N. A."): Im Dokumentenkontext suchen!
+    if not author or author.lower() in ("o. a.", "ohne autor", "n. a.", "untitled"):
+        ctx_author = find_author_in_context(clean_raw, clean_url, link_meta, context_text)
+        if ctx_author:
+            author = ctx_author
 
     if not author:
         author = "N. A." if is_en_doc else "O. A."
