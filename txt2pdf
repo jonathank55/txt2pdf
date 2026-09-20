@@ -529,18 +529,26 @@ def generate_bibliography_typst(
 ) -> str:
     """Erzeugt das standardkonforme APA-Literaturverzeichnis als einspaltige, linksbündige Extraseite mit anklickbaren Links."""
     citations = []
+    seen_formatted = set()
 
+    raw_candidates = []
     if explicit_entries:
-        for entry in explicit_entries:
-            clean_entry = entry.strip()
-            if clean_entry:
-                cit = format_citation_to_apa_7(clean_entry)
-                if cit and cit.get("formatted"):
-                    citations.append(cit)
-    elif urls:
+        for e in explicit_entries:
+            s_e = e.strip()
+            if s_e and s_e not in raw_candidates:
+                raw_candidates.append(s_e)
+    if urls:
         for u in urls:
-            cit = format_citation_to_apa_7(u)
-            if cit and cit.get("formatted"):
+            s_u = u.strip()
+            if s_u and s_u not in raw_candidates:
+                raw_candidates.append(s_u)
+
+    for item in raw_candidates:
+        cit = format_citation_to_apa_7(item)
+        if cit and cit.get("formatted"):
+            norm_f = cit["formatted"].strip().lower()
+            if norm_f not in seen_formatted:
+                seen_formatted.add(norm_f)
                 citations.append(cit)
 
     if not citations:
@@ -603,6 +611,15 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
     full_raw_text = "\n".join(raw_lines)
     all_urls = extract_urls_from_text(full_raw_text)
 
+    bib_header_exact_regex = re.compile(
+        r"^(?:Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography|Library):?\s*$",
+        re.IGNORECASE
+    )
+    bib_header_prefix_regex = re.compile(
+        r"^(Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography|Library):?\s+(.+)$",
+        re.IGNORECASE
+    )
+
     paragraphs = []
     current_lines = []
 
@@ -612,8 +629,27 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             if current_lines:
                 paragraphs.append("\n".join(current_lines))
                 current_lines = []
-        else:
-            current_lines.append(s)
+            continue
+
+        if bib_header_exact_regex.match(s):
+            if current_lines:
+                paragraphs.append("\n".join(current_lines))
+                current_lines = []
+            paragraphs.append(s)
+            continue
+
+        m_pref = bib_header_prefix_regex.match(s)
+        if m_pref:
+            if current_lines:
+                paragraphs.append("\n".join(current_lines))
+                current_lines = []
+            paragraphs.append(m_pref.group(1).strip())
+            rest_line = m_pref.group(2).strip()
+            if rest_line:
+                paragraphs.append(rest_line)
+            continue
+
+        current_lines.append(s)
 
     if current_lines:
         paragraphs.append("\n".join(current_lines))
@@ -633,7 +669,8 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
     numbered_header_regex = re.compile(r"^(\d+(?:\.\d+)*[\.:\)]\s+[A-ZÄÖÜ].*)$")
     roman_header_regex = re.compile(r"^([IVXLCDM]+[\.:\)]\s+[A-ZÄÖÜ].*)$")
     alpha_header_regex = re.compile(r"^([A-Z]\.\s+[A-ZÄÖÜ].*)$")
-    bib_header_regex = re.compile(r"^(?:Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography):?\s*$", re.IGNORECASE)
+    bib_header_regex = re.compile(r"^(?:Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography|Library):?\s*$", re.IGNORECASE)
+    bib_header_inline_regex = re.compile(r"^(?:Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography|Library):?\s*(.*)$", re.IGNORECASE)
 
     for i, para in enumerate(paragraphs):
         lines_in_para = para.splitlines()
@@ -733,30 +770,48 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#111111\"))[{h_text}]\n#v(0.8mm)\n")
             continue
 
-        # 6. Literaturverzeichnis-Abschnittsüberschrift
-        if bib_header_regex.match(flat_text):
+        # 6. Literaturverzeichnis-Abschnittsüberschrift oder reiner Bibliografie-Block
+        words_in_para = flat_text.split()
+        is_all_urls = bool(words_in_para and all(
+            w.startswith(("http://", "https://", "doi:", "10.")) or
+            w.lower() in ("doi.org", "url:", "quelle:", "quellen:", "links:", "link:") or
+            re.match(r"^https?://", w) or
+            re.match(r"^10\.\d{4,9}/", w)
+            for w in words_in_para
+        ))
+
+        m_bib_header = bib_header_inline_regex.match(flat_text)
+        if m_bib_header:
             in_bibliography_section = True
             has_explicit_bibliography = True
-            raw_title_clean = flat_text.rstrip(":").strip()
-            if raw_title_clean.isupper() and len(raw_title_clean) > 3:
-                bib_heading_title = raw_title_clean.capitalize()
-            elif raw_title_clean:
-                bib_heading_title = raw_title_clean
+            first_w = flat_text.split()[0].rstrip(":").strip()
+            if first_w.isupper() and len(first_w) > 3:
+                bib_heading_title = first_w.capitalize()
+            elif first_w:
+                bib_heading_title = first_w
+
+            remainder = m_bib_header.group(1).strip()
+            if remainder:
+                candidate_urls = re.findall(r"https?://[^\s<>\"\'\[\]]+|\bdoi:\s*10\.\d{4,9}/[^\s<>\"\'\[\]]+|\b10\.\d{4,9}/[^\s<>\"\'\[\]]+", remainder)
+                if candidate_urls:
+                    for cu in candidate_urls:
+                        explicit_bib_entries.append(cu.strip())
+                else:
+                    explicit_bib_entries.append(remainder)
             continue
 
-        # 7. APA-Zitate / Literaturangaben (werden isoliert für die Extraseite gesammelt)
-        if in_bibliography_section or is_apa_citation(flat_text):
+        # 7. APA-Zitate / Literaturangaben / reine URL-Blöcke (werden isoliert für die Extraseite gesammelt)
+        if in_bibliography_section or is_apa_citation(flat_text) or is_all_urls:
             in_bibliography_section = True
             has_explicit_bibliography = True
             candidate_lines = [l.strip() for l in lines_in_para if l.strip()]
-            has_multiple_citations = len(candidate_lines) > 1 and all(
-                ("http" in l or "doi" in l or is_apa_citation(l)) for l in candidate_lines
-            )
-            if has_multiple_citations:
-                for l in candidate_lines:
+            for l in candidate_lines:
+                urls_in_line = re.findall(r"https?://[^\s<>\"\'\[\]]+|\bdoi:\s*10\.\d{4,9}/[^\s<>\"\'\[\]]+|\b10\.\d{4,9}/[^\s<>\"\'\[\]]+", l)
+                if urls_in_line and (len(urls_in_line) > 1 or is_all_urls):
+                    for single_u in urls_in_line:
+                        explicit_bib_entries.append(single_u.strip())
+                else:
                     explicit_bib_entries.append(l)
-            else:
-                explicit_bib_entries.append(flat_text)
             continue
 
         # 8. Versalien-Überschriften (ALL CAPS / Großbuchstaben) -> Große Überschrift: Zentriert & Fett
@@ -1129,17 +1184,35 @@ def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_autho
             continue
 
         # Literaturverzeichnis-Abschnitt
-        if bib_header_regex.match(p_plain_clean):
+        words_rtf = p_plain_clean.split()
+        is_all_urls_rtf = bool(words_rtf and all(
+            w.startswith(("http://", "https://", "doi:", "10.")) or
+            w.lower() in ("doi.org", "url:", "quelle:", "quellen:", "links:", "link:", "library:") or
+            re.match(r"^https?://", w) or
+            re.match(r"^10\.\d{4,9}/", w)
+            for w in words_rtf
+        ))
+
+        m_bib_rtf = re.match(
+            r"^(?:Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography|Library):?\s*(.*)$",
+            p_plain_clean,
+            re.IGNORECASE
+        )
+        if m_bib_rtf:
             in_bib_section = True
             has_explicit_bib = True
-            raw_title_clean = p_plain_clean.rstrip(":").strip()
-            if raw_title_clean.isupper() and len(raw_title_clean) > 3:
-                bib_heading_title = raw_title_clean.capitalize()
-            elif raw_title_clean:
-                bib_heading_title = raw_title_clean
+            first_w_rtf = p_plain_clean.split()[0].rstrip(":").strip()
+            if first_w_rtf.isupper() and len(first_w_rtf) > 3:
+                bib_heading_title = first_w_rtf.capitalize()
+            elif first_w_rtf:
+                bib_heading_title = first_w_rtf
+
+            rem_rtf = m_bib_rtf.group(1).strip()
+            if rem_rtf:
+                rtf_bib_entries.append(rem_rtf)
             continue
 
-        if in_bib_section or is_apa_citation(p_plain_clean):
+        if in_bib_section or is_apa_citation(p_plain_clean) or is_all_urls_rtf:
             in_bib_section = True
             has_explicit_bib = True
             rtf_bib_entries.append(content)
@@ -1430,14 +1503,37 @@ def convert_txt_to_apa_standalone(
 
     paragraphs = []
     cur = []
+    bib_re_standalone = re.compile(r"^(?:Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography|Library):?\s*$", re.I)
+    bib_re_prefix = re.compile(r"^(Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography|Library):?\s+(.+)$", re.I)
+
     for l in body_lines:
         s = l.strip()
         if not s:
             if cur:
                 paragraphs.append("\n".join(cur))
                 cur = []
-        else:
-            cur.append(s)
+            continue
+
+        if bib_re_standalone.match(s):
+            if cur:
+                paragraphs.append("\n".join(cur))
+                cur = []
+            paragraphs.append(s)
+            continue
+
+        m_bp = bib_re_prefix.match(s)
+        if m_bp:
+            if cur:
+                paragraphs.append("\n".join(cur))
+                cur = []
+            paragraphs.append(m_bp.group(1).strip())
+            rest_bp = m_bp.group(2).strip()
+            if rest_bp:
+                paragraphs.append(rest_bp)
+            continue
+
+        cur.append(s)
+
     if cur:
         paragraphs.append("\n".join(cur))
 
@@ -1450,19 +1546,46 @@ def convert_txt_to_apa_standalone(
         flat = " ".join(l.strip() for l in lines_in_para).strip()
 
         words_f = flat.split()
-        is_all_urls = bool(words_f and all(w.startswith(("http://", "https://", "doi:", "10.")) or w.lower() in ("doi.org", "url:") for w in words_f))
-        if re.match(r"^(?:Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography|Library):?\s*$", flat, re.I):
+        is_all_urls = bool(words_f and all(
+            w.startswith(("http://", "https://", "doi:", "10.")) or
+            w.lower() in ("doi.org", "url:", "quelle:", "quellen:", "library:") or
+            re.match(r"^https?://", w) or
+            re.match(r"^10\.\d{4,9}/", w)
+            for w in words_f
+        ))
+
+        m_bib_header = re.match(r"^(?:Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography|Library):?\s*(.*)$", flat, re.I)
+        if m_bib_header:
             in_bib = True
+            rem_bib = m_bib_header.group(1).strip()
+            if rem_bib:
+                cit_data = format_citation_to_apa_7(rem_bib)
+                if cit_data and cit_data.get("formatted"):
+                    bib_entries.append(f"#block(spacing: 1.2em)[\n  #set par(hanging-indent: 12.7mm, first-line-indent: 0pt, justify: false)\n  {cit_data['formatted']}\n]")
+                else:
+                    esc_cite = format_content_to_typst(rem_bib)
+                    bib_entries.append(f"#block(spacing: 1.2em)[\n  #set par(hanging-indent: 12.7mm, first-line-indent: 0pt, justify: false)\n  {esc_cite}\n]")
             continue
 
         if in_bib or is_apa_citation(flat) or is_all_urls:
             in_bib = True
-            cit_data = format_citation_to_apa_7(flat)
-            if cit_data and cit_data.get("formatted"):
-                bib_entries.append(f"#block(spacing: 1.2em)[\n  #set par(hanging-indent: 12.7mm, first-line-indent: 0pt, justify: false)\n  {cit_data['formatted']}\n]")
+            # Falls mehrere URLs im Absatz vorhanden sind, jede einzeln formatieren
+            urls_in_para = re.findall(r"https?://[^\s<>\"\'\[\]]+|\bdoi:\s*10\.\d{4,9}/[^\s<>\"\'\[\]]+|\b10\.\d{4,9}/[^\s<>\"\'\[\]]+", flat)
+            if urls_in_para and (len(urls_in_para) > 1 or is_all_urls):
+                for single_u in urls_in_para:
+                    cit_data = format_citation_to_apa_7(single_u.strip())
+                    if cit_data and cit_data.get("formatted"):
+                        bib_entries.append(f"#block(spacing: 1.2em)[\n  #set par(hanging-indent: 12.7mm, first-line-indent: 0pt, justify: false)\n  {cit_data['formatted']}\n]")
+                    else:
+                        esc_cite = format_content_to_typst(single_u.strip())
+                        bib_entries.append(f"#block(spacing: 1.2em)[\n  #set par(hanging-indent: 12.7mm, first-line-indent: 0pt, justify: false)\n  {esc_cite}\n]")
             else:
-                esc_cite = format_content_to_typst(flat)
-                bib_entries.append(f"#block(spacing: 1.2em)[\n  #set par(hanging-indent: 12.7mm, first-line-indent: 0pt, justify: false)\n  {esc_cite}\n]")
+                cit_data = format_citation_to_apa_7(flat)
+                if cit_data and cit_data.get("formatted"):
+                    bib_entries.append(f"#block(spacing: 1.2em)[\n  #set par(hanging-indent: 12.7mm, first-line-indent: 0pt, justify: false)\n  {cit_data['formatted']}\n]")
+                else:
+                    esc_cite = format_content_to_typst(flat)
+                    bib_entries.append(f"#block(spacing: 1.2em)[\n  #set par(hanging-indent: 12.7mm, first-line-indent: 0pt, justify: false)\n  {esc_cite}\n]")
             continue
 
         is_h = (not flat.endswith((".", "...", ";")) and len(flat) <= 300 and len(lines_in_para) <= 3 and
