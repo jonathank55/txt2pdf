@@ -69,7 +69,21 @@ else
     echo -e "${GREEN}==>${NC} PT Serif ist bereits vorhanden."
 fi
 
-# 4. Bestimme Zielverzeichnis für die Binärdatei
+# 4. Prüfe und installiere DeepL Python-Bibliothek
+echo -e "${BLUE}==>${NC} Prüfe DeepL-Bibliothek..."
+if ! python3 -c "import deepl" &>/dev/null; then
+    echo -e "${BLUE}==>${NC} Installiere DeepL Python-Bibliothek..."
+    python3 -m pip install --break-system-packages deepl 2>/dev/null || python3 -m pip install deepl 2>/dev/null || true
+    if python3 -c "import deepl" &>/dev/null; then
+        echo -e "${GREEN}==>${NC} DeepL-Bibliothek wurde erfolgreich installiert."
+    else
+        echo -e "${RED}Hinweis:${NC} DeepL-Paket konnte nicht automatisch installiert werden. Für Übersetzungen bitte 'pip install deepl' ausführen."
+    fi
+else
+    echo -e "${GREEN}==>${NC} DeepL-Bibliothek ist bereits vorhanden."
+fi
+
+# 5. Bestimme Zielverzeichnis für die Binärdatei
 INSTALL_DIR="/usr/local/bin"
 if [ ! -w "$INSTALL_DIR" ]; then
     INSTALL_DIR="$HOME/.local/bin"
@@ -78,7 +92,7 @@ fi
 
 TARGET_BIN="$INSTALL_DIR/txt2pdf"
 
-# 5. Download oder lokale Kopie
+# 6. Download oder lokale Kopie
 if [ -f "$SCRIPT_SRC_DIR/txt2pdf" ]; then
     cp "$SCRIPT_SRC_DIR/txt2pdf" "$TARGET_BIN"
 else
@@ -92,7 +106,7 @@ fi
 
 chmod +x "$TARGET_BIN"
 
-# 6. PATH-Prüfung
+# 7. PATH-Prüfung
 if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
     SHELL_PROFILE="$HOME/.zshrc"
     if [ -f "$HOME/.bashrc" ] && [ "$SHELL" = "*/bash" ]; then

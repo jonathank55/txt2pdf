@@ -2045,6 +2045,48 @@ def convert_txt_to_apa_standalone(
         print(f"Fehler bei APA-Kompilierung:\n{res.stderr}", file=sys.stderr)
         return False
 
+def translate_via_deepl(text: str, target_lang: str = "en", source_lang: str = "auto") -> str:
+    """Übersetzt Text via DeepL unter Nutzung der deepl-Bibliothek oder deepl_translate_engine."""
+    if not text or not text.strip():
+        return text
+
+    # 1. Versuche deepl_translate_engine
+    try:
+        config_scripts = os.path.expanduser("~/.gemini/config/scripts")
+        if config_scripts not in sys.path:
+            sys.path.insert(0, config_scripts)
+        from deepl_translate_engine import translate_text
+        return translate_text(text, source_lang=source_lang, target_lang=target_lang)
+    except Exception:
+        pass
+
+    # 2. Direktes deepl SDK
+    try:
+        import deepl
+        auth_key = os.environ.get("DEEPL_AUTH_KEY") or os.environ.get("DEEPL_API_KEY")
+        if not auth_key:
+            for p in (os.path.expanduser("~/.gemini/config/deepl.key"), os.path.expanduser("~/.config/deepl/key")):
+                if os.path.exists(p):
+                    with open(p, "r", encoding="utf-8") as f:
+                        auth_key = f.read().strip()
+                        if auth_key:
+                            break
+        if auth_key:
+            translator = deepl.Translator(auth_key)
+            norm_tgt = target_lang.upper().strip()
+            if norm_tgt == "EN":
+                norm_tgt = "EN-US"
+            res = translator.translate_text(text, target_lang=norm_tgt)
+            return res.text if hasattr(res, "text") else str(res)
+    except Exception as e:
+        print(f"DeepL SDK Warnung: {e}", file=sys.stderr)
+
+    print(
+        "Hinweis: Für DeepL-Übersetzungen bitte 'pip install deepl' ausführen und DEEPL_AUTH_KEY setzen.",
+        file=sys.stderr
+    )
+    return text
+
 def convert_txt_to_pdf(
     input_path: str,
     output_path: str = None,
@@ -2061,7 +2103,8 @@ def convert_txt_to_pdf(
     columns: int = None,
     font_family: str = "serif",
     format_preset: str = "br2",
-    use_initial: bool = None
+    use_initial: bool = None,
+    target_lang: str = None
 ) -> bool:
     if not os.path.exists(input_path):
         print(f"Fehler: Datei nicht existent: {input_path}", file=sys.stderr)
@@ -2189,6 +2232,45 @@ def convert_txt_to_pdf(
         if extracted_title and not is_matching_title(extracted_title, doc_title):
             body_lines = [extracted_title, ""] + list(body_lines)
 
+        if target_lang:
+            trans_tgt = target_lang.lower().strip()
+            # Titel und Autorüberschrift übersetzen falls zutreffend
+            if doc_title:
+                doc_title = translate_via_deepl(doc_title, target_lang=trans_tgt)
+            if file_title_candidate:
+                file_title_candidate = translate_via_deepl(file_title_candidate, target_lang=trans_tgt)
+
+            # Body-Lines absatzweise übersetzen (Bilder ##, URLs und Quellenüberschriften schonen)
+            translated_body = []
+            curr_chunk = []
+            for line in body_lines:
+                s_line = line.strip()
+                if s_line.startswith("##") or s_line.startswith("http://") or s_line.startswith("https://") or s_line.startswith("doi.org"):
+                    if curr_chunk:
+                        chunk_text = "\n".join(curr_chunk)
+                        translated_body.extend(translate_via_deepl(chunk_text, target_lang=trans_tgt).split("\n"))
+                        curr_chunk = []
+                    translated_body.append(line)
+                elif re.match(r"^(?:LITERATURVERZEICHNIS|QUELLEN|REFERENCES|LITERATURE)\b", s_line, re.I):
+                    if curr_chunk:
+                        chunk_text = "\n".join(curr_chunk)
+                        translated_body.extend(translate_via_deepl(chunk_text, target_lang=trans_tgt).split("\n"))
+                        curr_chunk = []
+                    hdr = "REFERENCES" if trans_tgt == "en" else "LITERATURVERZEICHNIS"
+                    translated_body.append(hdr)
+                elif not s_line:
+                    if curr_chunk:
+                        chunk_text = "\n".join(curr_chunk)
+                        translated_body.extend(translate_via_deepl(chunk_text, target_lang=trans_tgt).split("\n"))
+                        curr_chunk = []
+                    translated_body.append("")
+                else:
+                    curr_chunk.append(line)
+            if curr_chunk:
+                chunk_text = "\n".join(curr_chunk)
+                translated_body.extend(translate_via_deepl(chunk_text, target_lang=trans_tgt).split("\n"))
+            body_lines = translated_body
+
         body_text, urls, explicit_bib_entries, bib_heading_title = parse_body_to_typst(
             body_lines, images=images, caption_size=caption_size, use_initial=final_initial, doc_dir=doc_dir, hanging_indent=hanging_indent
         )
@@ -2212,8 +2294,8 @@ def convert_txt_to_pdf(
     else:
         font_spec = '("PT Serif", "EB Garamond", "Times New Roman", "Times")'
 
-    effective_lang = lang
-    if lang == "de" and 'raw_content' in locals() and raw_content:
+    effective_lang = target_lang.lower().strip() if target_lang else lang
+    if not target_lang and lang == "de" and 'raw_content' in locals() and raw_content:
         words_sample = re.findall(r"\b[A-Za-z]+\b", raw_content.lower())
         en_stop = {"the", "and", "in", "of", "to", "with", "is", "that", "for", "on", "as", "by", "this", "from"}
         de_stop = {"der", "die", "das", "und", "in", "von", "zu", "mit", "ist", "dass", "für", "auf", "als"}
@@ -2398,6 +2480,8 @@ def main():
     parser.add_argument("-a", dest="author", metavar="AUTOR", default=None, help="Autor")
     parser.add_argument("-t", dest="title", metavar="TITEL", default=None, help="Titel")
     parser.add_argument("-d", dest="date", metavar="DATUM", default=None, help="Datum")
+    lang_help = f"Übersetzung via DeepL ({BLUE}en{RESET}, {BLUE}de{RESET}, etc.; optional)"
+    parser.add_argument("-l", dest="target_lang", metavar="SPRACHE", default=None, help=lang_help)
     parser.add_argument("-o", dest="output", metavar="AUSGABE", default=None, help="Ausgabepfad (.pdf)")
     parser.add_argument("input_file", metavar="DATEI", help="Text- oder RTF/RTFD-Datei (.txt/.md/.rtf/.rtfd)")
 
@@ -2408,6 +2492,7 @@ def main():
     final_title = args.title
     final_author = args.author
     final_date = args.date
+    final_target_lang = args.target_lang
     all_images = args.images or []
     fmt = (args.format_preset or "br2").lower().strip()
     final_font_size = args.size if fmt != "apa" else None
@@ -2421,7 +2506,8 @@ def main():
         font_size=final_font_size,
         images=all_images,
         open_preview=False,
-        format_preset=fmt
+        format_preset=fmt,
+        target_lang=final_target_lang
     )
     sys.exit(0 if success else 1)
 
