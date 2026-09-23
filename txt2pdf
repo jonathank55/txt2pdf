@@ -1257,6 +1257,8 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
     paragraphs = []
     current_lines = []
     current_indent = False
+    current_blank_before = False
+    had_blank_line = False
 
     for line in raw_lines:
         s = line.strip()
@@ -1264,10 +1266,12 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             if current_lines:
                 paragraphs.append({
                     "text": "\n".join(current_lines),
-                    "has_indent": current_indent
+                    "has_indent": current_indent,
+                    "has_blank_before": current_blank_before
                 })
                 current_lines = []
                 current_indent = False
+            had_blank_line = True
             continue
 
         is_indented_line = bool(line.startswith("\t") or line.startswith("  ") or (len(line) > len(line.lstrip()) and bool(line.strip())))
@@ -1276,14 +1280,17 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             if current_lines:
                 paragraphs.append({
                     "text": "\n".join(current_lines),
-                    "has_indent": current_indent
+                    "has_indent": current_indent,
+                    "has_blank_before": current_blank_before
                 })
                 current_lines = []
                 current_indent = False
             paragraphs.append({
                 "text": s,
-                "has_indent": False
+                "has_indent": False,
+                "has_blank_before": had_blank_line
             })
+            had_blank_line = False
             continue
 
         m_pref = bib_header_prefix_regex.match(s)
@@ -1291,19 +1298,23 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             if current_lines:
                 paragraphs.append({
                     "text": "\n".join(current_lines),
-                    "has_indent": current_indent
+                    "has_indent": current_indent,
+                    "has_blank_before": current_blank_before
                 })
                 current_lines = []
                 current_indent = False
             paragraphs.append({
                 "text": m_pref.group(1).strip(),
-                "has_indent": False
+                "has_indent": False,
+                "has_blank_before": had_blank_line
             })
+            had_blank_line = False
             rest_line = m_pref.group(2).strip()
             if rest_line:
                 paragraphs.append({
                     "text": rest_line,
-                    "has_indent": is_indented_line
+                    "has_indent": is_indented_line,
+                    "has_blank_before": False
                 })
             continue
 
@@ -1319,14 +1330,17 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             if current_lines:
                 paragraphs.append({
                     "text": "\n".join(current_lines),
-                    "has_indent": current_indent
+                    "has_indent": current_indent,
+                    "has_blank_before": current_blank_before
                 })
                 current_lines = []
                 current_indent = False
             paragraphs.append({
                 "text": s,
-                "has_indent": False
+                "has_indent": False,
+                "has_blank_before": had_blank_line
             })
+            had_blank_line = False
             continue
 
         is_md_block = bool(
@@ -1338,32 +1352,40 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             if current_lines:
                 paragraphs.append({
                     "text": "\n".join(current_lines),
-                    "has_indent": current_indent
+                    "has_indent": current_indent,
+                    "has_blank_before": current_blank_before
                 })
                 current_lines = []
                 current_indent = False
             paragraphs.append({
                 "text": s,
-                "has_indent": False
+                "has_indent": False,
+                "has_blank_before": had_blank_line
             })
+            had_blank_line = False
             continue
 
         if is_indented_line and current_lines:
             paragraphs.append({
                 "text": "\n".join(current_lines),
-                "has_indent": current_indent
+                "has_indent": current_indent,
+                "has_blank_before": current_blank_before
             })
             current_lines = []
             current_indent = True
+            current_blank_before = False
 
         if not current_lines:
             current_indent = is_indented_line
+            current_blank_before = had_blank_line
+            had_blank_line = False
         current_lines.append(s)
 
     if current_lines:
         paragraphs.append({
             "text": "\n".join(current_lines),
-            "has_indent": current_indent
+            "has_indent": current_indent,
+            "has_blank_before": current_blank_before
         })
 
     image_extensions = (".png", ".jpg", ".jpeg", ".webp", ".pdf", ".gif", ".svg", ".tiff", ".tif")
@@ -1374,6 +1396,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
     heading_2_done = False
     in_bibliography_section = False
     has_explicit_bibliography = False
+    last_element_was_body_para = False
 
     chapter_header_regex = re.compile(
         r"^(?:KAPITEL|Kapitel|CHAPTER|Chapter|ABSCHNITT|Abschnitt|SECTION|Section|TEIL|Teil|MODUL|Modul|LEKTION|Lektion|THEMA|Thema|EINHEIT|Einheit)\s+([0-9IVXLCDM]+|[A-Z])(?:\s*[:\-\.\–—]\s*(.*)|$)",
@@ -1386,8 +1409,11 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
     bib_header_inline_regex = re.compile(r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library)\b:?\s*(.*)$", re.IGNORECASE)
 
     for i, p_info in enumerate(paragraphs):
+        prev_was_body_para = last_element_was_body_para
+        last_element_was_body_para = False
         para = p_info["text"]
         para_has_indent = p_info["has_indent"]
+        para_has_blank_before = p_info.get("has_blank_before", False)
         lines_in_para = para.splitlines()
         first_line = lines_in_para[0].strip()
         flat_text = " ".join(l.strip() for l in lines_in_para).strip()
@@ -1599,7 +1625,10 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         else:
             if para_has_indent:
                 escaped_para = f"#h(3.8mm){escaped_para}"
+            if para_has_blank_before and prev_was_body_para:
+                escaped_para = f"#v(0.8em)\n{escaped_para}"
         first_body_para_done = True
+        last_element_was_body_para = True
         typst_elements.append(escaped_para + "\n")
 
     # Falls Bilder über -i übergeben wurden, diese am Ende anhängen
@@ -1631,6 +1660,7 @@ class RTFHTMLToTypstParser(HTMLParser):
         self.tag_stack = []
         self.curr_align = None
         self.curr_heading = False
+        self.had_empty_paragraph = False
         self.in_style = False
         self.style_text = []
         self.in_title = False
@@ -1792,8 +1822,12 @@ class RTFHTMLToTypstParser(HTMLParser):
                     'plain': inner_plain,
                     'align': self.curr_align,
                     'heading': self.curr_heading,
-                    'has_indent': self.curr_indent
+                    'has_indent': self.curr_indent,
+                    'has_blank_before': self.had_empty_paragraph
                 })
+                self.had_empty_paragraph = False
+            else:
+                self.had_empty_paragraph = True
             self.curr_buf = []
             self.curr_plain = []
             self.curr_indent = False
@@ -1910,9 +1944,12 @@ def parse_rtf_to_typst(
     heading_2_done = False
     in_bib_section = False
     has_explicit_bib = False
+    last_element_was_body_para = False
     bib_header_regex = re.compile(r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library)\b:?\s*$", re.IGNORECASE)
 
     for idx, p in enumerate(paras):
+        prev_was_body_para = last_element_was_body_para
+        last_element_was_body_para = False
         content = re.sub(r'\](?=\()', r']\\', p['typst'])
         p_plain_clean = p['plain'].strip()
         plain_paragraphs.append(p['plain'])
@@ -2037,8 +2074,11 @@ def parse_rtf_to_typst(
             else:
                 if p.get('has_indent'):
                     content = f"#h(3.8mm){content}"
+                if p.get('has_blank_before') and prev_was_body_para:
+                    content = f"#v(0.8em)\n{content}"
                 typst_blocks.append(content)
             first_body_para_done = True
+            last_element_was_body_para = True
 
     # Falls Bilder über -i übergeben wurden, diese am Ende anhängen
     if images:
@@ -2831,6 +2871,7 @@ def convert_txt_to_pdf(
 #set par(
   justify: true,
   leading: {final_leading},
+  spacing: {final_leading},
   first-line-indent: 0pt
 )
 
