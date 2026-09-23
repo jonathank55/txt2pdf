@@ -1197,7 +1197,7 @@ def generate_bibliography_typst(
 
     return f"""
 #pagebreak()
-#set page(columns: 1, margin: (x: 16mm, top: 22mm, bottom: 18mm))
+#set page(columns: 1, header: none, margin: (x: 16mm, top: 18mm, bottom: 18mm))
 #show link: set text(fill: rgb("#0b57d0"))
 #align(left)[
   #v(1.5mm)
@@ -2783,65 +2783,12 @@ def convert_txt_to_pdf(
   ]
 ]
 """
-        header_directive = f"""  header: context {{
-    let page_num = counter(page).get().first()
-    if page_num > 1 [
-      #place(top, dy: 8mm)[
-        #align(center)[
-          #text(font: {title_font_spec}, size: 8.5pt, fill: rgb("#000000"))[{escape_typst_line(display_title)}]
-        ]
-      ]
-    ]
-  }},"""
-    else:
-        author_block = ""
-        if doc_author:
-            author_block = f'\n        #v(1.4mm)\n        #block[#text(style: "italic", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(doc_author)}]]'
-
-        if doc_date:
-            header_content = f"""#grid(
-      columns: (1fr, auto),
-      gutter: 6mm,
-      align: (left + horizon, right + horizon),
-      [
-        #block[#text(font: {title_font_spec}, size: {title_size}, weight: "bold", fill: rgb("#000000"))[{escape_typst_line(doc_title)}]]{author_block}
-      ],
-      [
-        #text(fill: rgb("#000000"))[{escape_typst_line(doc_date)}]
-      ]
-    )"""
-        else:
-            header_content = f"""#align(left)[
-      #block[#text(font: {title_font_spec}, size: {title_size}, weight: "bold", fill: rgb("#000000"))[{escape_typst_line(doc_title)}]]{author_block}
-    ]"""
-
-        top_header_box = f"""// Vollbreite-Titelbox mit Trennlinie (Titel dynamisch: Textgröße + 6pt)
-#place(top, scope: "parent", float: true)[
-  #block(width: 100%, inset: (bottom: 2.5mm))[
-    {header_content}
-    #v(1.2mm)
-    #line(length: 100%, stroke: 0.5pt + rgb("#000000"))
-  ]
-]
-"""
-        header_directive = f"""  header: context {{
-    let page_num = counter(page).get().first()
-    if page_num > 1 [
-      #place(top, dy: 8mm)[
-        #align(center)[
-          #text(font: {title_font_spec}, size: 8.5pt, fill: rgb("#000000"))[{escape_typst_line(doc_title)}]
-          #v(1.2mm)
-          #line(length: 100%, stroke: 0.35pt + rgb("#000000"))
-        ]
-      ]
-    ]
-  }},"""
+    header_directive = "  header: none,"
 
     if is_rtf:
-        header_directive = "  header: none,"
         top_header_box = ""
 
-    # Druckbare DIN-A4-Geometrie: 16 mm Außenränder, 22 mm oberer Rand (mit 8 mm Header-Offset), 18 mm unterer Rand
+    # Druckbare DIN-A4-Geometrie: 16 mm Außenränder, 18 mm oberer und unterer Rand
     # Seitennummern nur bei mehrseitigen Dokumenten (total_pages > 1)
     page_label = "Page" if effective_lang == "en" else "Seite"
     of_label = "of" if effective_lang == "en" else "von"
@@ -2852,7 +2799,7 @@ def convert_txt_to_pdf(
 
 #set page(
   paper: "a4",
-  margin: (x: 16mm, top: 22mm, bottom: 18mm),
+  margin: (x: 16mm, top: 18mm, bottom: 18mm),
   columns: {final_columns},
 {header_directive}
   footer: context {{
