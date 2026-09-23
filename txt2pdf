@@ -1040,6 +1040,10 @@ FONT_DEFINITIONS = {
         "name": "PT Serif",
         "spec": '("PT Serif", "EB Garamond", "Times New Roman")',
     },
+    "serif": {
+        "name": "PT Serif",
+        "spec": '("PT Serif", "EB Garamond", "Times New Roman")',
+    },
     "optima": {
         "name": "Optima",
         "spec": '("Optima", "PT Sans", "Helvetica Neue", "Arial")',
@@ -1048,7 +1052,15 @@ FONT_DEFINITIONS = {
         "name": "Roboto",
         "spec": '("Roboto", "Helvetica Neue", "Arial")',
     },
+    "sans": {
+        "name": "Roboto",
+        "spec": '("Roboto", "Helvetica Neue", "Arial")',
+    },
     "monaco": {
+        "name": "Monaco",
+        "spec": '("Monaco", "Menlo", "Courier New")',
+    },
+    "mono": {
         "name": "Monaco",
         "spec": '("Monaco", "Menlo", "Courier New")',
     },
@@ -1058,17 +1070,14 @@ def resolve_font_spec(font_arg: str = None, fmt: str = "br2") -> Tuple[str, str]
     """Löst die typografische Schriftartenspezifikation für den Textkörper deterministisch auf."""
     if font_arg:
         cleaned = font_arg.strip().lower()
-        if cleaned in FONT_DEFINITIONS:
-            return FONT_DEFINITIONS[cleaned]["spec"], FONT_DEFINITIONS[cleaned]["name"]
-        return f'("{font_arg.strip()}", "PT Serif", "Times New Roman")', font_arg.strip()
+        if cleaned not in ("", "none", "auto", "default"):
+            if cleaned in FONT_DEFINITIONS:
+                return FONT_DEFINITIONS[cleaned]["spec"], FONT_DEFINITIONS[cleaned]["name"]
+            return f'("{font_arg.strip()}", "Optima", "PT Serif", "Times New Roman")', font_arg.strip()
 
-    if fmt == "br2":
+    if fmt in ("br2", "atk1"):
         return FONT_DEFINITIONS["optima"]["spec"], "Optima"
-    elif fmt == "atk1":
-        return FONT_DEFINITIONS["optima"]["spec"], "Optima"
-    elif fmt in ("atk2", "atk"):
-        return FONT_DEFINITIONS["pt serif"]["spec"], "PT Serif"
-    elif fmt == "br1":
+    elif fmt in ("atk2", "atk", "br1"):
         return FONT_DEFINITIONS["pt serif"]["spec"], "PT Serif"
     elif fmt == "apa":
         return FONT_DEFINITIONS["times new roman"]["spec"], "Times New Roman"
@@ -2397,7 +2406,7 @@ def convert_txt_to_pdf(
     font: str = None,
     open_preview: bool = False,
     columns: int = None,
-    font_family: str = "serif",
+    font_family: str = None,
     format_preset: str = "br2",
     use_initial: bool = None,
     target_lang: str = None
@@ -2499,7 +2508,8 @@ def convert_txt_to_pdf(
     hanging_indent = "12.7mm" if final_columns == 1 else "6mm"
 
     # Typografische Schriftartauflösung via -z oder Format-Standard
-    body_font_spec, chosen_font_name = resolve_font_spec(font or font_family, fmt)
+    selected_font = font if font is not None else font_family
+    body_font_spec, chosen_font_name = resolve_font_spec(selected_font, fmt)
     title_font_spec = resolve_title_font_spec(fmt, body_font_spec)
 
     if is_rtf:
