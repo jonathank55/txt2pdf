@@ -1966,7 +1966,7 @@ def parse_rtf_to_typst(
             if fmt == "atk1":
                 t_inner = f"#upper[{t_inner}]"
             v_title_gap = "1.8mm" if fmt == "atk1" else "1.4mm"
-            typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    #text(font: {title_font_spec}, size: {title_size}, weight: \"bold\", fill: rgb(\"#000000\"))[{t_inner}]\n  ]\n]\n#v({v_title_gap})")
+            typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    #text(font: {title_font_spec}, size: {title_size}, weight: \"bold\", fill: rgb(\"#000000\"))[#strong[{t_inner}]]\n  ]\n]\n#v({v_title_gap})")
             continue
 
         if idx == title_idx + 1 and (is_author_name(p_plain_clean) or p.get('align') == 'center' or p_plain_clean == extracted_author or bool(re.match(r"^(?:autor|author|von|by):\s*", p_plain_clean, re.I))):
@@ -2774,7 +2774,7 @@ def convert_txt_to_pdf(
         author_part = f'\n        #v(1.8mm)\n        #block[#text(style: "italic", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(doc_author)}]]' if doc_author else ""
         date_part = f'\n        #v(1.2mm)\n        #block[#text(size: 8pt, fill: rgb("#000000"))[{escape_typst_line(doc_date)}]]' if doc_date else ""
         header_content = f"""#align(center)[
-      #block[#text(font: {title_font_spec}, size: {title_size}, weight: "bold", fill: rgb("#000000"))[{escape_typst_line(display_title)}]]{author_part}{date_part}
+      #block[#text(font: {title_font_spec}, size: {title_size}, weight: "bold", fill: rgb("#000000"))[#strong[{escape_typst_line(display_title)}]]]{author_part}{date_part}
     ]"""
         top_header_box = f"""// Vollbreite-Titelbox ohne Trennlinie (atk1: zentriert eingebettet, Academy Engraved LET, Großbuchstaben)
 #place(top, scope: "parent", float: true)[
@@ -2783,6 +2783,38 @@ def convert_txt_to_pdf(
   ]
 ]
 """
+    else:
+        author_block = ""
+        if doc_author:
+            author_block = f'\n        #v(1.4mm)\n        #block[#text(style: "italic", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(doc_author)}]]'
+
+        if doc_date:
+            header_content = f"""#grid(
+      columns: (1fr, auto),
+      gutter: 6mm,
+      align: (left + horizon, right + horizon),
+      [
+        #block[#text(font: {title_font_spec}, size: {title_size}, weight: "bold", fill: rgb("#000000"))[#strong[{escape_typst_line(doc_title)}]]]{author_block}
+      ],
+      [
+        #text(fill: rgb("#000000"))[{escape_typst_line(doc_date)}]
+      ]
+    )"""
+        else:
+            header_content = f"""#align(left)[
+      #block[#text(font: {title_font_spec}, size: {title_size}, weight: "bold", fill: rgb("#000000"))[#strong[{escape_typst_line(doc_title)}]]]{author_block}
+    ]"""
+
+        top_header_box = f"""// Vollbreite-Titelbox mit Trennlinie (Titel dynamisch: Textgröße + 6pt)
+#place(top, scope: "parent", float: true)[
+  #block(width: 100%, inset: (bottom: 2.5mm))[
+    {header_content}
+    #v(1.2mm)
+    #line(length: 100%, stroke: 0.5pt + rgb("#000000"))
+  ]
+]
+"""
+
     header_directive = "  header: none,"
 
     if is_rtf:
