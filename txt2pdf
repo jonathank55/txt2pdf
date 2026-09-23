@@ -1409,8 +1409,6 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
     bib_header_inline_regex = re.compile(r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library)\b:?\s*(.*)$", re.IGNORECASE)
 
     for i, p_info in enumerate(paragraphs):
-        prev_was_body_para = last_element_was_body_para
-        last_element_was_body_para = False
         para = p_info["text"]
         para_has_indent = p_info["has_indent"]
         para_has_blank_before = p_info.get("has_blank_before", False)
@@ -1432,8 +1430,9 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                 resolved_img = target_clean
 
             if resolved_img:
+                top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
                 fig_code = format_figure_typst(resolved_img, caption_size=caption_size)
-                typst_elements.append(fig_code)
+                typst_elements.append(f"{top_v}{fig_code}")
                 continue
 
         # 1. Zitat-Zwischenüberschriften (8pt, fett, zentriert)
@@ -1447,9 +1446,9 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         )
         if is_quote_heading:
             escaped = format_content_to_typst(flat_text)
-            top_v = "#v(2.2mm)\n" if typst_elements else ""
+            top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
             typst_elements.append(
-                f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped}]\n  ]\n]\n#v(2mm)\n"
+                f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped}]\n  ]\n]\n"
             )
             continue
 
@@ -1457,46 +1456,45 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         if first_line.startswith(">"):
             quote_text = " ".join(re.sub(r"^>\s*", "", l).strip() for l in lines_in_para)
             escaped_quote = format_content_to_typst(quote_text)
+            top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
             if len(quote_text) <= 200:
-                top_v = "#v(2.2mm)\n" if typst_elements else ""
                 typst_elements.append(
-                    f"{top_v}#align(center)[\n  #block(width: 95%)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_quote}]\n  ]\n]\n#v(2mm)\n"
+                    f"{top_v}#align(center)[\n  #block(width: 95%)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_quote}]\n  ]\n]\n"
                 )
             else:
-                top_v = "#v(1.5mm)\n" if typst_elements else ""
                 typst_elements.append(
                     f"{top_v}#block(inset: (left: 2.5mm), stroke: (left: 1.5pt + rgb(\"#000000\")))"
-                    f"[#text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_quote}]]\n#v(1.5mm)\n"
+                    f"[#text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_quote}]]\n"
                 )
             continue
 
         # 3. Markdown-Überschriften (#, ##, ###, ####)
         if first_line.startswith("#### "):
             h_text = escape_typst_line(first_line[5:].strip())
-            top_v = "#v(1.6mm)\n" if typst_elements else ""
-            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n#v(0.5mm)\n")
+            top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
+            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
             continue
         elif first_line.startswith("### "):
             h_text = escape_typst_line(first_line[4:].strip())
-            top_v = "#v(1.8mm)\n" if typst_elements else ""
-            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n#v(0.6mm)\n")
+            top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
+            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
             continue
         elif first_line.startswith("## "):
             h_text = escape_typst_line(first_line[3:].strip())
-            top_v = "#v(2.4mm)\n" if typst_elements else ""
-            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n#v(0.8mm)\n")
+            top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
+            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
             continue
         elif first_line.startswith("# "):
             h_text = escape_typst_line(first_line[2:].strip())
-            top_v = "#v(2.8mm)\n" if typst_elements else ""
-            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n#v(1mm)\n")
+            top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
+            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
             continue
 
         # 4. Explizite Kapitel- / Abschnittsüberschriften (KAPITEL 1: ..., Chapter 2 ...)
         if is_single_line and len(first_line) <= 160 and chapter_header_regex.match(first_line):
             h_text = escape_typst_line(first_line)
-            top_v = "#v(2.6mm)\n" if typst_elements else ""
-            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n#v(0.9mm)\n")
+            top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
+            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
             continue
 
         # 5. Nummerierte & alphabetische Gliederungsüberschriften (1. ..., 1.1 ..., I. ..., A. ...)
@@ -1507,8 +1505,8 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         )
         if is_numbered_heading:
             h_text = escape_typst_line(first_line)
-            top_v = "#v(2.2mm)\n" if typst_elements else ""
-            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n#v(0.8mm)\n")
+            top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
+            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
             continue
 
         # 6. Literaturverzeichnis-Abschnittsüberschrift oder reiner Bibliografie-Block
@@ -1562,17 +1560,20 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         is_all_caps = len(alpha_chars) >= 3 and flat_text.isupper() and len(flat_text) <= 200 and len(flat_text.split()) <= 20
         if is_all_caps:
             h_text = escape_typst_line(flat_text)
-            top_v = "#v(2.5mm)\n" if typst_elements else ""
+            top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
             typst_elements.append(
-                f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n#v(1.2mm)\n"
+                f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n"
             )
             continue
 
         # 9. Aufzählungspunkte
         if first_line.startswith(("- ", "* ", "• ")):
+            top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
+            list_lines = []
             for l in lines_in_para:
                 item_text = format_content_to_typst(re.sub(r"^[-*•]\s+", "", l.strip()))
-                typst_elements.append(f"- {item_text}\n")
+                list_lines.append(f"- {item_text}\n")
+            typst_elements.append(f"{top_v}{''.join(list_lines)}")
             continue
 
         # 10a. Überschrift 1: Ein Satz oder mehrere Wörter ohne Punkt am Ende (Zentriert & Fett)
@@ -1587,9 +1588,9 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         )
         if is_heading_1:
             h_text = format_content_to_typst(flat_text)
-            top_v = "#v(2.5mm)\n" if typst_elements else ""
+            top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
             typst_elements.append(
-                f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n#v(1.2mm)\n"
+                f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n"
             )
             continue
 
@@ -1612,23 +1613,25 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         if is_heading_2:
             heading_2_done = True
             h_text = format_content_to_typst(flat_text)
-            top_v = "#v(2.0mm)\n" if typst_elements else ""
+            top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
             typst_elements.append(
-                f"{top_v}#par(justify: true)[\n  #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n]\n#v(1.0mm)\n"
+                f"{top_v}#par(justify: true)[\n  #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n]\n"
             )
             continue
 
         # 11. Regulärer Fließtextabsatz (Standard mit optionalem Initial im 1. Fließtext-Absatz)
         escaped_para = format_content_to_typst(flat_text)
+        top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
         if use_initial and not first_body_para_done:
             escaped_para = apply_initial_to_typst_element(escaped_para)
+            if top_v:
+                escaped_para = f"{top_v}{escaped_para}"
         else:
             if para_has_indent:
                 escaped_para = f"#h(3.8mm){escaped_para}"
-            if para_has_blank_before and prev_was_body_para:
-                escaped_para = f"#v(0.8em)\n{escaped_para}"
+            if top_v:
+                escaped_para = f"{top_v}{escaped_para}"
         first_body_para_done = True
-        last_element_was_body_para = True
         typst_elements.append(escaped_para + "\n")
 
     # Falls Bilder über -i übergeben wurden, diese am Ende anhängen
@@ -2022,7 +2025,8 @@ def parse_rtf_to_typst(
             t_content = content
             if not t_content.startswith("#strong["):
                 t_content = f"#strong[{t_content}]"
-            typst_blocks.append(f"#v(2.2mm)\n#align(center)[\n  #par(justify: false)[\n    #text(fill: rgb(\"#000000\"))[{t_content}]\n  ]\n]\n#v(2mm)")
+            top_v = "#v(0.8em)\n" if (p.get('has_blank_before') and typst_blocks) else ""
+            typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(fill: rgb(\"#000000\"))[{t_content}]\n  ]\n]\n")
             continue
 
         # Fette Lead-Überschrift oder explizite Überschriften
@@ -2054,31 +2058,32 @@ def parse_rtf_to_typst(
                 not any(p_plain_clean.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "dass "])
             )
 
+        top_v = "#v(0.8em)\n" if (p.get('has_blank_before') and typst_blocks) else ""
+
         if p['align'] == 'center':
-            typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    {content}\n  ]\n]")
+            typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    {content}\n  ]\n]")
         elif p['align'] == 'right':
-            typst_blocks.append(f"#align(right)[\n  #par(justify: false)[\n    {content}\n  ]\n]")
+            typst_blocks.append(f"{top_v}#align(right)[\n  #par(justify: false)[\n    {content}\n  ]\n]")
         elif p['heading'] or is_section_heading or is_heading_1 or (is_lead_heading and not is_heading_2):
             inner_c = t_trimmed[8:-1] if is_fully_bold else content
-            top_v = "#v(2.5mm)\n" if typst_blocks else ""
-            typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #strong[{inner_c}]\n  ]\n]\n#v(1.2mm)")
+            typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #strong[{inner_c}]\n  ]\n]\n")
         elif is_heading_2:
             heading_2_done = True
             inner_c = t_trimmed[8:-1] if is_fully_bold else content
-            top_v = "#v(2.0mm)\n" if typst_blocks else ""
-            typst_blocks.append(f"{top_v}#par(justify: true)[\n  #strong[{inner_c}]\n]\n#v(1.0mm)")
+            typst_blocks.append(f"{top_v}#par(justify: true)[\n  #strong[{inner_c}]\n]\n")
         else:
             if use_initial and not first_body_para_done:
                 content_init = apply_initial_to_typst_element(content)
+                if top_v:
+                    content_init = f"{top_v}{content_init}"
                 typst_blocks.append(content_init)
             else:
                 if p.get('has_indent'):
                     content = f"#h(3.8mm){content}"
-                if p.get('has_blank_before') and prev_was_body_para:
-                    content = f"#v(0.8em)\n{content}"
+                if top_v:
+                    content = f"{top_v}{content}"
                 typst_blocks.append(content)
             first_body_para_done = True
-            last_element_was_body_para = True
 
     # Falls Bilder über -i übergeben wurden, diese am Ende anhängen
     if images:
