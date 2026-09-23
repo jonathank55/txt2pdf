@@ -1096,7 +1096,7 @@ def resolve_font_spec(font_arg: str = None, fmt: str = "br2") -> Tuple[str, str]
             return f'("{font_arg.strip()}", "Optima", "PT Serif", "Times New Roman")', font_arg.strip()
 
     if fmt == "atk1":
-        return FONT_DEFINITIONS["big caslon"]["spec"], "Big Caslon"
+        return FONT_DEFINITIONS["cochin"]["spec"], "Cochin"
     elif fmt == "br2":
         return FONT_DEFINITIONS["optima"]["spec"], "Optima"
     elif fmt in ("atk2", "atk", "br1"):
@@ -2959,7 +2959,7 @@ def main():
     fmt_help = (
         f"Format: {BLUE}br2{RESET} (Bericht, 2 Spalten, Optima; Standard), "
         f"{BLUE}br1{RESET} (Bericht, 1 Spalte, PT Serif), "
-        f"{BLUE}atk1{RESET} (Artikel, 3 Spalten, Big Caslon, ohne Linie), "
+        f"{BLUE}atk1{RESET} (Artikel, 3 Spalten, Cochin, ohne Linie), "
         f"{BLUE}atk2{RESET} (Artikel, 3 Spalten, PT Serif, mit Linie), "
         f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter)"
     )
