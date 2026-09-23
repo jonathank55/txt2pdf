@@ -98,6 +98,29 @@ else
     echo -e "${GREEN}==>${NC} Roboto ist bereits vorhanden."
 fi
 
+# 3c. Prüfe und installiere Schriftart Didot / GFS Didot
+echo -e "${BLUE}==>${NC} Prüfe Schriftart Didot..."
+DIDOT_INSTALLED=false
+
+if command -v typst &>/dev/null && typst fonts 2>/dev/null | grep -qi "Didot"; then
+    DIDOT_INSTALLED=true
+fi
+
+if [ -f "$FONTS_DIR/GFSDidot-Regular.ttf" ]; then
+    DIDOT_INSTALLED=true
+fi
+
+if [ "$DIDOT_INSTALLED" = false ]; then
+    echo -e "${BLUE}==>${NC} Installiere GFS Didot nach $FONTS_DIR..."
+    curl -fsSL "https://raw.githubusercontent.com/google/fonts/main/ofl/gfsdidot/GFSDidot-Regular.ttf" -o "$FONTS_DIR/GFSDidot-Regular.ttf" 2>/dev/null || true
+    if command -v fc-cache &>/dev/null; then
+        fc-cache -f "$FONTS_DIR" &>/dev/null || true
+    fi
+    echo -e "${GREEN}==>${NC} Didot (GFS Didot) wurde erfolgreich eingerichtet."
+else
+    echo -e "${GREEN}==>${NC} Didot ist bereits vorhanden."
+fi
+
 # 4. Prüfe und installiere DeepL Python-Bibliothek
 echo -e "${BLUE}==>${NC} Prüfe DeepL-Bibliothek..."
 if ! python3 -c "import deepl" &>/dev/null; then

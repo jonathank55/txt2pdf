@@ -1064,6 +1064,10 @@ FONT_DEFINITIONS = {
         "name": "Monaco",
         "spec": '("Monaco", "Menlo", "Courier New")',
     },
+    "didot": {
+        "name": "Didot",
+        "spec": '("Didot", "GFS Didot", "Theano Didot", "Bodoni 72", "PT Serif", "Times New Roman")',
+    },
 }
 
 def resolve_font_spec(font_arg: str = None, fmt: str = "br2") -> Tuple[str, str]:
@@ -1087,17 +1091,23 @@ def resolve_font_spec(font_arg: str = None, fmt: str = "br2") -> Tuple[str, str]
 def resolve_title_font_spec(fmt: str, body_font_spec: str) -> str:
     """Löst die typografische Schriftartenspezifikation für die Hauptüberschrift (Titel) auf."""
     if fmt == "atk1":
-        return '("Academy Engraved LET", "Optima", "Times New Roman")'
+        return '("Didot", "GFS Didot", "Theano Didot", "Bodoni 72", "PT Serif", "Times New Roman")'
+    return body_font_spec
+
+def resolve_heading_font_spec(fmt: str, body_font_spec: str) -> str:
+    """Löst die typografische Schriftartenspezifikation für sämtliche Überschriften auf."""
+    if fmt == "atk1":
+        return '("Didot", "GFS Didot", "Theano Didot", "Bodoni 72", "PT Serif", "Times New Roman")'
     return body_font_spec
 
 def install_core_fonts() -> bool:
-    """Überprüft und installiert fehlende Kernschriftarten (Roboto, PT Serif) für Typst."""
+    """Überprüft und installiert fehlende Kernschriftarten (PT Serif, Roboto, GFS Didot) für Typst."""
     home = os.path.expanduser("~")
     is_mac = (sys.platform == "darwin")
     font_dir = os.path.join(home, "Library", "Fonts") if is_mac else os.path.join(home, ".local", "share", "fonts")
     os.makedirs(font_dir, exist_ok=True)
 
-    print("Prüfe Kernschriftarten für txt2pdf (Times New Roman, PT Serif, Optima, Roboto, Monaco, Academy Engraved LET)...")
+    print("Prüfe Kernschriftarten für txt2pdf (Times New Roman, PT Serif, Optima, Roboto, Monaco, Didot)...")
 
     if is_mac and shutil.which("brew"):
         try:
@@ -1115,6 +1125,7 @@ def install_core_fonts() -> bool:
         "PT_Serif-Web-Bold.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/ptserif/PT_Serif-Web-Bold.ttf",
         "PT_Serif-Web-Italic.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/ptserif/PT_Serif-Web-Italic.ttf",
         "PT_Serif-Web-BoldItalic.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/ptserif/PT_Serif-Web-BoldItalic.ttf",
+        "GFSDidot-Regular.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/gfsdidot/GFSDidot-Regular.ttf",
     }
 
     import urllib.request
@@ -1240,7 +1251,7 @@ def format_figure_typst(img_path: str, caption_title: str = "", source: str = ""
         f"]\n#v(2.5mm)\n"
     )
 
-def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str = "6pt", use_initial: bool = True, doc_dir: str = "", hanging_indent: str = "6mm") -> Tuple[str, List[str], List[str], str]:
+def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str = "6pt", use_initial: bool = True, doc_dir: str = "", hanging_indent: str = "6mm", heading_font_spec: str = '("PT Serif", "EB Garamond", "Times New Roman")') -> Tuple[str, List[str], List[str], str]:
     """Wandelt Textzeilen in Typst-Code um, verarbeitet Überschriften, trennt APA-Zitate für die Extraseite und extrahiert Links."""
     full_raw_text = "\n".join(raw_lines)
     all_urls = extract_urls_from_text(full_raw_text)
@@ -1435,7 +1446,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                 typst_elements.append(f"{top_v}{fig_code}")
                 continue
 
-        # 1. Zitat-Zwischenüberschriften (8pt, fett, zentriert)
+        # 1. Zitat-Zwischenüberschriften (fett, zentriert)
         is_quote_heading = (
             len(flat_text) <= 280 and (
                 (flat_text.startswith("»") and flat_text.endswith("«")) or
@@ -1448,7 +1459,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             escaped = format_content_to_typst(flat_text)
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
             typst_elements.append(
-                f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped}]\n  ]\n]\n"
+                f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(font: {heading_font_spec}, weight: \"bold\", fill: rgb(\"#000000\"))[{escaped}]\n  ]\n]\n"
             )
             continue
 
@@ -1472,29 +1483,29 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         if first_line.startswith("#### "):
             h_text = escape_typst_line(first_line[5:].strip())
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
+            typst_elements.append(f"{top_v}#text(font: {heading_font_spec}, weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
             continue
         elif first_line.startswith("### "):
             h_text = escape_typst_line(first_line[4:].strip())
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
+            typst_elements.append(f"{top_v}#text(font: {heading_font_spec}, weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
             continue
         elif first_line.startswith("## "):
             h_text = escape_typst_line(first_line[3:].strip())
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
+            typst_elements.append(f"{top_v}#text(font: {heading_font_spec}, weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
             continue
         elif first_line.startswith("# "):
             h_text = escape_typst_line(first_line[2:].strip())
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
+            typst_elements.append(f"{top_v}#text(font: {heading_font_spec}, weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
             continue
 
         # 4. Explizite Kapitel- / Abschnittsüberschriften (KAPITEL 1: ..., Chapter 2 ...)
         if is_single_line and len(first_line) <= 160 and chapter_header_regex.match(first_line):
             h_text = escape_typst_line(first_line)
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
+            typst_elements.append(f"{top_v}#text(font: {heading_font_spec}, weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
             continue
 
         # 5. Nummerierte & alphabetische Gliederungsüberschriften (1. ..., 1.1 ..., I. ..., A. ...)
@@ -1506,7 +1517,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         if is_numbered_heading:
             h_text = escape_typst_line(first_line)
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
+            typst_elements.append(f"{top_v}#text(font: {heading_font_spec}, weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
             continue
 
         # 6. Literaturverzeichnis-Abschnittsüberschrift oder reiner Bibliografie-Block
@@ -1562,7 +1573,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             h_text = escape_typst_line(flat_text)
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
             typst_elements.append(
-                f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n"
+                f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(font: {heading_font_spec}, weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n"
             )
             continue
 
@@ -1590,7 +1601,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             h_text = format_content_to_typst(flat_text)
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
             typst_elements.append(
-                f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n"
+                f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(font: {heading_font_spec}, weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n"
             )
             continue
 
@@ -1615,7 +1626,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             h_text = format_content_to_typst(flat_text)
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
             typst_elements.append(
-                f"{top_v}#par(justify: true)[\n  #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n]\n"
+                f"{top_v}#par(justify: true)[\n  #text(font: {heading_font_spec}, weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n]\n"
             )
             continue
 
@@ -1896,7 +1907,8 @@ def parse_rtf_to_typst(
     use_initial: bool = True,
     hanging_indent: str = "6mm",
     title_font_spec: str = '("PT Serif", "EB Garamond", "Times New Roman")',
-    fmt: str = "br2"
+    fmt: str = "br2",
+    heading_font_spec: str = '("PT Serif", "EB Garamond", "Times New Roman")'
 ) -> Tuple[str, List[str], str, str, str, List[str], str]:
     """Konvertiert eine RTF- oder RTFD-Datei via textutil deterministisch unter vollständiger Wahrung der Formatierung."""
     res = subprocess.run(
@@ -2026,7 +2038,7 @@ def parse_rtf_to_typst(
             if not t_content.startswith("#strong["):
                 t_content = f"#strong[{t_content}]"
             top_v = "#v(0.8em)\n" if (p.get('has_blank_before') and typst_blocks) else ""
-            typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(fill: rgb(\"#000000\"))[{t_content}]\n  ]\n]\n")
+            typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(font: {heading_font_spec}, fill: rgb(\"#000000\"))[{t_content}]\n  ]\n]\n")
             continue
 
         # Fette Lead-Überschrift oder explizite Überschriften
@@ -2066,11 +2078,11 @@ def parse_rtf_to_typst(
             typst_blocks.append(f"{top_v}#align(right)[\n  #par(justify: false)[\n    {content}\n  ]\n]")
         elif p['heading'] or is_section_heading or is_heading_1 or (is_lead_heading and not is_heading_2):
             inner_c = t_trimmed[8:-1] if is_fully_bold else content
-            typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #strong[{inner_c}]\n  ]\n]\n")
+            typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(font: {heading_font_spec}, weight: \"bold\", fill: rgb(\"#000000\"))[#strong[{inner_c}]]\n  ]\n]\n")
         elif is_heading_2:
             heading_2_done = True
             inner_c = t_trimmed[8:-1] if is_fully_bold else content
-            typst_blocks.append(f"{top_v}#par(justify: true)[\n  #strong[{inner_c}]\n]\n")
+            typst_blocks.append(f"{top_v}#par(justify: true)[\n  #text(font: {heading_font_spec}, weight: \"bold\", fill: rgb(\"#000000\"))[#strong[{inner_c}]]\n]\n")
         else:
             if use_initial and not first_body_para_done:
                 content_init = apply_initial_to_typst_element(content)
@@ -2657,12 +2669,13 @@ def convert_txt_to_pdf(
     is_rtfd = abs_input.lower().endswith(".rtfd")
     is_rtf = is_rtfd or abs_input.lower().endswith(".rtf")
 
-    # Dynamische Schriftgrößen: 6pt bis 12pt (Hauptüberschrift verbindlich immer +6pt, Bildunterschriften -2pt)
+    # Dynamische Schriftgrößen: 6pt bis 12pt (Hauptüberschrift bei atk1: +8pt, sonst: +6pt, Bildunterschriften -2pt)
     m = re.search(r"([\d.]+)", str(final_font_size))
-    raw_pt = float(m.group(1)) if m else 8.0
+    raw_pt = float(m.group(1)) if m else (9.0 if fmt in ("atk1", "atk2", "atk") else 12.0)
     base_pt = max(6.0, min(raw_pt, 12.0))
     final_font_size = f"{base_pt:g}pt"
-    title_size = f"{base_pt + 6.0:g}pt"
+    title_offset = 8.0 if fmt == "atk1" else 6.0
+    title_size = f"{base_pt + title_offset:g}pt"
     caption_size = f"{max(base_pt - 2.0, 3.0):g}pt"
     hanging_indent = "12.7mm" if final_columns == 1 else "6mm"
 
@@ -2670,6 +2683,7 @@ def convert_txt_to_pdf(
     selected_font = font if font is not None else font_family
     body_font_spec, chosen_font_name = resolve_font_spec(selected_font, fmt)
     title_font_spec = resolve_title_font_spec(fmt, body_font_spec)
+    heading_font_spec = resolve_heading_font_spec(fmt, body_font_spec)
 
     if is_rtf:
         body_text, urls, rtf_title, rtf_author, rtf_date, explicit_bib_entries, bib_heading_title = parse_rtf_to_typst(
@@ -2683,7 +2697,8 @@ def convert_txt_to_pdf(
             use_initial=final_initial,
             hanging_indent=hanging_indent,
             title_font_spec=title_font_spec,
-            fmt=fmt
+            fmt=fmt,
+            heading_font_spec=heading_font_spec
         )
         extracted_title = rtf_title if rtf_title else None
         extracted_author = rtf_author if rtf_author else None
@@ -2750,7 +2765,7 @@ def convert_txt_to_pdf(
             body_lines = translated_body
 
         body_text, urls, explicit_bib_entries, bib_heading_title = parse_body_to_typst(
-            body_lines, images=images, caption_size=caption_size, use_initial=final_initial, doc_dir=doc_dir, hanging_indent=hanging_indent
+            body_lines, images=images, caption_size=caption_size, use_initial=final_initial, doc_dir=doc_dir, hanging_indent=hanging_indent, heading_font_spec=heading_font_spec
         )
 
     if is_rtf:
@@ -2793,7 +2808,7 @@ def convert_txt_to_pdf(
         header_content = f"""#align(center)[
       #block[#text(font: {title_font_spec}, size: {title_size}, weight: "bold", fill: rgb("#000000"))[#strong[{escape_typst_line(display_title)}]]]{author_part}{date_part}
     ]"""
-        top_header_box = f"""// Vollbreite-Titelbox ohne Trennlinie (atk1: zentriert eingebettet, Academy Engraved LET, Großbuchstaben)
+        top_header_box = f"""// Vollbreite-Titelbox ohne Trennlinie (atk1: zentriert eingebettet, Didot, Großbuchstaben)
 #place(top, scope: "parent", float: true)[
   #block(width: 100%, inset: (bottom: 4mm))[
     {header_content}
@@ -2842,10 +2857,12 @@ def convert_txt_to_pdf(
     page_label = "Page" if effective_lang == "en" else "Seite"
     of_label = "of" if effective_lang == "en" else "von"
 
+    heading_show_rule = f"#show heading: set text(font: {heading_font_spec})\n" if fmt == "atk1" else ""
+
     typst_template = f"""#import "@preview/droplet:0.3.1": dropcap
 
 #show link: set text(fill: rgb("#000000"))
-
+{heading_show_rule}
 #set page(
   paper: "a4",
   margin: (x: 16mm, top: 18mm, bottom: 18mm),
@@ -2931,12 +2948,12 @@ def main():
     fmt_help = (
         f"Format: {BLUE}br2{RESET} (Bericht, 2 Spalten, Optima; Standard), "
         f"{BLUE}br1{RESET} (Bericht, 1 Spalte, PT Serif), "
-        f"{BLUE}atk1{RESET} (Artikel, 3 Spalten, Optima, ohne Linie, Titel: Academy Engraved LET in Großbuchstaben), "
+        f"{BLUE}atk1{RESET} (Artikel, 3 Spalten, Optima, ohne Linie, Titel & Überschriften: Didot in Großbuchstaben), "
         f"{BLUE}atk2{RESET} (Artikel, 3 Spalten, PT Serif, mit Linie), "
         f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter)"
     )
     size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 12pt bei br2/br1, 9pt bei atk1/atk2; entfällt bei apa)"
-    font_help = f"Schriftart ({BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, {BLUE}Roboto{RESET}, {BLUE}Monaco{RESET})"
+    font_help = f"Schriftart ({BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, {BLUE}Didot{RESET}, {BLUE}Roboto{RESET}, {BLUE}Monaco{RESET})"
 
     parser = argparse.ArgumentParser(
         prog="txt2pdf",
