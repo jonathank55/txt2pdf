@@ -1095,7 +1095,9 @@ def resolve_font_spec(font_arg: str = None, fmt: str = "br2") -> Tuple[str, str]
                 return FONT_DEFINITIONS[cleaned]["spec"], FONT_DEFINITIONS[cleaned]["name"]
             return f'("{font_arg.strip()}", "Optima", "PT Serif", "Times New Roman")', font_arg.strip()
 
-    if fmt in ("br2", "atk1"):
+    if fmt == "atk1":
+        return FONT_DEFINITIONS["big caslon"]["spec"], "Big Caslon"
+    elif fmt == "br2":
         return FONT_DEFINITIONS["optima"]["spec"], "Optima"
     elif fmt in ("atk2", "atk", "br1"):
         return FONT_DEFINITIONS["pt serif"]["spec"], "PT Serif"
@@ -2643,7 +2645,7 @@ def convert_txt_to_pdf(
         final_initial = use_initial if use_initial is not None else True
         final_gutter = gutter if gutter is not None else "4.8mm"
         final_font_size = font_size if font_size is not None else "9pt"
-        default_leading = "0.28em"  # Faktor 0,8 (0.8 * 0.35em = 0.28em)
+        default_leading = "0.35em"
     elif fmt == "atk2":
         final_columns = columns if columns is not None else 3
         final_initial = use_initial if use_initial is not None else True
@@ -2959,7 +2961,7 @@ def main():
     fmt_help = (
         f"Format: {BLUE}br2{RESET} (Bericht, 2 Spalten, Optima; Standard), "
         f"{BLUE}br1{RESET} (Bericht, 1 Spalte, PT Serif), "
-        f"{BLUE}atk1{RESET} (Artikel, 3 Spalten, Optima, ohne Linie, Titel: Didot), "
+        f"{BLUE}atk1{RESET} (Artikel, 3 Spalten, Big Caslon, ohne Linie, Titel: Didot), "
         f"{BLUE}atk2{RESET} (Artikel, 3 Spalten, PT Serif, mit Linie), "
         f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter)"
     )
