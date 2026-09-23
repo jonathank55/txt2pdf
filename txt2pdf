@@ -1657,13 +1657,15 @@ def parse_rtf_to_typst(
                 t_inner = t_content[8:-1]
             else:
                 t_inner = t_content
-            typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    #text(font: {title_font_spec}, size: {title_size}, weight: \"bold\", fill: rgb(\"#000000\"))[{t_inner}]\n  ]\n]\n#v(1.2mm)")
+            if fmt == "atk1":
+                t_inner = f"#upper[{t_inner}]"
+            typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    #text(font: {title_font_spec}, size: {title_size}, weight: \"bold\", fill: rgb(\"#000000\"))[{t_inner}]\n  ]\n]\n#v(3mm)")
             continue
 
         if idx == title_idx + 1 and (is_author_name(p_plain_clean) or p.get('align') == 'center' or p_plain_clean == extracted_author or bool(re.match(r"^(?:autor|author|von|by):\s*", p_plain_clean, re.I))):
             if not extracted_author:
                 extracted_author = p_plain_clean
-            typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    #text(style: \"italic\", weight: \"regular\", fill: rgb(\"#000000\"))[{content}]\n  ]\n]\n#v(1mm)")
+            typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    #text(style: \"italic\", weight: \"regular\", fill: rgb(\"#000000\"))[{content}]\n  ]\n]\n#v(1.5mm)")
             continue
 
         # Literaturverzeichnis-Abschnitt
@@ -2450,14 +2452,13 @@ def convert_txt_to_pdf(
     columns_directive = f"#set columns(gutter: {final_gutter})\n" if final_columns > 1 else ""
 
     if fmt == "atk1":
-        author_part = f'\n        #linebreak()\n        #v(1.2mm)\n        #text(style: "italic", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(doc_author)}]' if doc_author else ""
-        date_part = f'\n        #linebreak()\n        #v(0.8mm)\n        #text(size: 8pt, fill: rgb("#000000"))[{escape_typst_line(doc_date)}]' if doc_date else ""
+        display_title = doc_title.upper()
+        author_part = f'\n        #v(3mm)\n        #block[#text(style: "italic", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(doc_author)}]]' if doc_author else ""
+        date_part = f'\n        #v(1.5mm)\n        #block[#text(size: 8pt, fill: rgb("#000000"))[{escape_typst_line(doc_date)}]]' if doc_date else ""
         header_content = f"""#align(center)[
-      #par(justify: false)[
-        #text(font: {title_font_spec}, size: {title_size}, weight: "bold", fill: rgb("#000000"))[{escape_typst_line(doc_title)}]{author_part}{date_part}
-      ]
+      #block[#text(font: {title_font_spec}, size: {title_size}, weight: "bold", fill: rgb("#000000"))[{escape_typst_line(display_title)}]]{author_part}{date_part}
     ]"""
-        top_header_box = f"""// Vollbreite-Titelbox ohne Trennlinie (atk1: zentriert eingebettet, Academy Engraved LET)
+        top_header_box = f"""// Vollbreite-Titelbox ohne Trennlinie (atk1: zentriert eingebettet, Academy Engraved LET, Großbuchstaben)
 #place(top, scope: "parent", float: true)[
   #block(width: 100%, inset: (bottom: 4mm))[
     {header_content}
@@ -2469,7 +2470,7 @@ def convert_txt_to_pdf(
     if page_num > 1 [
       #place(top, dy: 8mm)[
         #align(center)[
-          #text(font: {title_font_spec}, size: 8.5pt, fill: rgb("#000000"))[{escape_typst_line(doc_title)}]
+          #text(font: {title_font_spec}, size: 8.5pt, fill: rgb("#000000"))[{escape_typst_line(display_title)}]
         ]
       ]
     ]
@@ -2477,7 +2478,7 @@ def convert_txt_to_pdf(
     else:
         author_block = ""
         if doc_author:
-            author_block = f'\n        #linebreak()\n        #v(0.8mm)\n        #text(style: "italic", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(doc_author)}]'
+            author_block = f'\n        #v(2.2mm)\n        #block[#text(style: "italic", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(doc_author)}]]'
 
         if doc_date:
             header_content = f"""#grid(
@@ -2485,7 +2486,7 @@ def convert_txt_to_pdf(
       gutter: 6mm,
       align: (left + horizon, right + horizon),
       [
-        #text(font: {title_font_spec}, size: {title_size}, weight: "bold", fill: rgb("#000000"))[{escape_typst_line(doc_title)}]{author_block}
+        #block[#text(font: {title_font_spec}, size: {title_size}, weight: "bold", fill: rgb("#000000"))[{escape_typst_line(doc_title)}]]{author_block}
       ],
       [
         #text(fill: rgb("#000000"))[{escape_typst_line(doc_date)}]
@@ -2493,7 +2494,7 @@ def convert_txt_to_pdf(
     )"""
         else:
             header_content = f"""#align(left)[
-      #text(font: {title_font_spec}, size: {title_size}, weight: "bold", fill: rgb("#000000"))[{escape_typst_line(doc_title)}]{author_block}
+      #block[#text(font: {title_font_spec}, size: {title_size}, weight: "bold", fill: rgb("#000000"))[{escape_typst_line(doc_title)}]]{author_block}
     ]"""
 
         top_header_box = f"""// Vollbreite-Titelbox mit Trennlinie (Titel dynamisch: Textgröße + 6pt)
@@ -2615,7 +2616,7 @@ def main():
     fmt_help = (
         f"Format: {BLUE}br2{RESET} (Bericht, 2 Spalten, Optima; Standard), "
         f"{BLUE}br1{RESET} (Bericht, 1 Spalte, PT Serif), "
-        f"{BLUE}atk1{RESET} (Artikel, 3 Spalten, Optima, ohne Linie, Titel: Academy Engraved LET), "
+        f"{BLUE}atk1{RESET} (Artikel, 3 Spalten, Optima, ohne Linie, Titel: Academy Engraved LET in Großbuchstaben), "
         f"{BLUE}atk2{RESET} (Artikel, 3 Spalten, PT Serif, mit Linie), "
         f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter)"
     )
