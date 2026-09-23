@@ -1074,11 +1074,11 @@ FONT_DEFINITIONS = {
     },
     "big caslon": {
         "name": "Big Caslon",
-        "spec": '("Big Caslon", "Libre Caslon Display", "Libre Caslon Text", "PT Serif", "Times New Roman")',
+        "spec": '("Libre Caslon Text", "Big Caslon", "Libre Caslon Display", "PT Serif", "Times New Roman")',
     },
     "caslon": {
         "name": "Big Caslon",
-        "spec": '("Big Caslon", "Libre Caslon Display", "Libre Caslon Text", "PT Serif", "Times New Roman")',
+        "spec": '("Libre Caslon Text", "Big Caslon", "Libre Caslon Display", "PT Serif", "Times New Roman")',
     },
     "baskerville": {
         "name": "Baskerville",
