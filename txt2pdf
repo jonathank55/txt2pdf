@@ -1189,6 +1189,7 @@ def generate_bibliography_typst(
     return f"""
 #pagebreak()
 #set page(columns: 1, margin: (x: 16mm, top: 22mm, bottom: 18mm))
+#show link: set text(fill: rgb("#0b57d0"))
 #align(left)[
   #v(1.5mm)
   #text(size: {title_size}, weight: "bold", fill: rgb("#000000"))[{escape_typst_line(bib_title)}]
