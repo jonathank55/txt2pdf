@@ -2888,7 +2888,7 @@ def convert_txt_to_pdf(
     if is_rtf:
         top_header_box = ""
 
-    # Druckbare DIN-A4-Geometrie: 12 mm Außenränder, 14 mm oberer und unterer Rand
+    # Druckbare DIN-A4-Geometrie: 16 mm Außenränder, 18 mm oberer und unterer Rand
     # Seitennummern nur bei mehrseitigen Dokumenten (total_pages > 1)
     page_label = "Page" if effective_lang == "en" else "Seite"
     of_label = "of" if effective_lang == "en" else "von"
@@ -2899,7 +2899,7 @@ def convert_txt_to_pdf(
 
 #set page(
   paper: "a4",
-  margin: (x: 12mm, top: 14mm, bottom: 14mm),
+  margin: (x: 16mm, top: 18mm, bottom: 18mm),
   columns: {final_columns},
 {header_directive}
   footer: context {{
