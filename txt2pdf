@@ -1095,9 +1095,9 @@ def resolve_font_spec(font_arg: str = None, fmt: str = "br2") -> Tuple[str, str]
                 return FONT_DEFINITIONS[cleaned]["spec"], FONT_DEFINITIONS[cleaned]["name"]
             return f'("{font_arg.strip()}", "Optima", "PT Serif", "Times New Roman")', font_arg.strip()
 
-    if fmt == "atk1":
+    if fmt in ("atk1", "atk2", "atk"):
         return FONT_DEFINITIONS["big caslon"]["spec"], "Big Caslon"
-    elif fmt in ("br2", "atk2", "atk", "br1"):
+    elif fmt in ("br2", "br1"):
         return FONT_DEFINITIONS["pt serif"]["spec"], "PT Serif"
     elif fmt == "apa":
         return FONT_DEFINITIONS["times new roman"]["spec"], "Times New Roman"
@@ -2826,7 +2826,7 @@ def convert_txt_to_pdf(
     if fmt in ("atk1", "atk2"):
         if fmt == "atk2":
             author_font_spec = FONT_DEFINITIONS["didot"]["spec"]
-            author_part = f'\n        #v(3.0mm)\n        #block[#text(font: {author_font_spec}, style: "normal", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(doc_author)}]]' if doc_author else ""
+            author_part = f'\n        #v(5.0mm)\n        #block[#text(font: {author_font_spec}, style: "normal", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(doc_author)}]]' if doc_author else ""
         else:
             author_part = f'\n        #v(1.4mm)\n        #block[#text(style: "italic", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(doc_author)}]]' if doc_author else ""
         date_part = f'\n        #v(1.0mm)\n        #block[#text(size: 8pt, fill: rgb("#000000"))[{escape_typst_line(doc_date)}]]' if doc_date else ""
@@ -2888,7 +2888,7 @@ def convert_txt_to_pdf(
     if is_rtf:
         top_header_box = ""
 
-    # Druckbare DIN-A4-Geometrie: 16 mm Außenränder, 18 mm oberer und unterer Rand
+    # Druckbare DIN-A4-Geometrie: 12 mm Außenränder, 14 mm oberer und unterer Rand
     # Seitennummern nur bei mehrseitigen Dokumenten (total_pages > 1)
     page_label = "Page" if effective_lang == "en" else "Seite"
     of_label = "of" if effective_lang == "en" else "von"
@@ -2899,7 +2899,7 @@ def convert_txt_to_pdf(
 
 #set page(
   paper: "a4",
-  margin: (x: 16mm, top: 18mm, bottom: 18mm),
+  margin: (x: 12mm, top: 14mm, bottom: 14mm),
   columns: {final_columns},
 {header_directive}
   footer: context {{
@@ -2980,7 +2980,7 @@ def main():
     RESET = "\033[0m"
 
     fmt_help = (
-        f"Format: {BLUE}atk2{RESET} (Artikel, 3 Spalten, PT Serif, mit Linie, Titel: Didot 36pt zentriert; Standard), "
+        f"Format: {BLUE}atk2{RESET} (Artikel, 3 Spalten, Big Caslon, mit Linie, Titel: Didot 36pt zentriert; Standard), "
         f"{BLUE}atk1{RESET} (Artikel, 3 Spalten, Big Caslon, ohne Linie), "
         f"{BLUE}br2{RESET} (Bericht, 2 Spalten, PT Serif), "
         f"{BLUE}br1{RESET} (Bericht, 1 Spalte, PT Serif), "
