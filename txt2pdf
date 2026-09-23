@@ -2400,7 +2400,7 @@ def convert_txt_to_pdf(
     date: str = None,
     lang: str = "de",
     font_size: str = None,
-    leading: str = "0.58em",
+    leading: str = None,
     gutter: str = None,
     images: List[str] = None,
     font: str = None,
@@ -2475,12 +2475,12 @@ def convert_txt_to_pdf(
         final_columns = columns if columns is not None else 3
         final_initial = use_initial if use_initial is not None else True
         final_gutter = gutter if gutter is not None else "4.8mm"
-        final_font_size = font_size if font_size is not None else "8pt"
+        final_font_size = font_size if font_size is not None else "9pt"
     elif fmt == "atk2":
         final_columns = columns if columns is not None else 3
         final_initial = use_initial if use_initial is not None else True
         final_gutter = gutter if gutter is not None else "4.8mm"
-        final_font_size = font_size if font_size is not None else "8pt"
+        final_font_size = font_size if font_size is not None else "9pt"
     elif fmt == "br1":
         final_columns = columns if columns is not None else 1
         final_initial = use_initial if use_initial is not None else False
@@ -2491,6 +2491,9 @@ def convert_txt_to_pdf(
         final_initial = use_initial if use_initial is not None else False
         final_gutter = gutter if gutter is not None else "5.2mm"
         final_font_size = font_size if font_size is not None else "12pt"
+
+    # Standardmäßiger einfacher Zeilenabstand (1-zeilig, 0.35em) im Fließtext für alle Formate (außer APA)
+    final_leading = leading if leading is not None else "0.35em"
 
     # Automatische Extraktion aus Dateinamen (z. B. "Titel : Autor" oder "Titel - Autor")
     file_title_candidate, file_author_candidate = parse_title_author_from_filename(base_name)
@@ -2733,7 +2736,7 @@ def convert_txt_to_pdf(
 
 #set par(
   justify: true,
-  leading: {leading},
+  leading: {final_leading},
   first-line-indent: 0pt
 )
 
@@ -2796,7 +2799,7 @@ def main():
         f"{BLUE}atk2{RESET} (Artikel, 3 Spalten, PT Serif, mit Linie), "
         f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter)"
     )
-    size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 12pt bei br2/br1, 8pt bei atk1/atk2; entfällt bei apa)"
+    size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 12pt bei br2/br1, 9pt bei atk1/atk2; entfällt bei apa)"
     font_help = f"Schriftart ({BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, {BLUE}Roboto{RESET}, {BLUE}Monaco{RESET})"
 
     parser = argparse.ArgumentParser(
