@@ -38,9 +38,9 @@ txt2pdf DATEI [OPTIONEN]
 
 ### Optionen
 
-- `-f FORMAT`  : Format-Vorgabe (`atk1` für 3-Spalten-Artikel mit Big Caslon ohne Trennlinie [Standard], `atk2` für 3-Spalten-Artikel mit PT Serif und Trennlinie, `br2` für 2-Spalten-Bericht mit PT Serif, `br1` für 1-Spalten-Bericht mit PT Serif, `apa` für 7. Edition APA-Bericht).
+- `-f FORMAT`  : Format-Vorgabe (`atk1` für 3-Spalten-Artikel mit Big Caslon ohne Trennlinie [Standard], `atk2` für 3-Spalten-Artikel mit 10pt Fließtext, zentriertem 36pt Didot-Titel und Trennlinie, `br2` für 2-Spalten-Bericht mit PT Serif, `br1` für 1-Spalten-Bericht mit PT Serif, `apa` für 7. Edition APA-Bericht).
 - `-z SCHRIFT` : Schriftart wählen (`Times New Roman`, `PT Serif`, `Optima`, `Didot`, `Cochin`, `Big Caslon`, `Baskerville`, `Roboto`, `Monaco`).
-- `-s GRÖßE`   : Fließtext-Größe (`6pt` bis `12pt`).
+- `-s GRÖßE`   : Fließtext-Größe (`6pt` bis `12pt`, Standard: 9pt bei `atk1`, 10pt bei `atk2`, 12pt bei `br1`/`br2`/`apa`).
 - `-i BILD`    : Abbildung einbinden (Syntax `##Pfad/zur/Datei` direkt im Textdokument verwenden).
 - `-a AUTOR`   : Autor manuell überschreiben (wird kursiv in Schwarz mit vergrößertem typografischem Abstand gerendert).
 - `-t TITEL`   : Titel manuell überschreiben (Hauptüberschriften sind verbindlich 10pt bei `atk1` bzw. 6pt bei sonstigen Profilen größer als der Text).

@@ -1106,6 +1106,8 @@ def resolve_font_spec(font_arg: str = None, fmt: str = "br2") -> Tuple[str, str]
 
 def resolve_title_font_spec(fmt: str, body_font_spec: str) -> str:
     """Löst die typografische Schriftartenspezifikation für die Hauptüberschrift (Titel) auf."""
+    if fmt == "atk2":
+        return FONT_DEFINITIONS["didot"]["spec"]
     return body_font_spec
 
 def resolve_heading_font_spec(fmt: str, body_font_spec: str) -> str:
@@ -2646,7 +2648,7 @@ def convert_txt_to_pdf(
         final_columns = columns if columns is not None else 3
         final_initial = use_initial if use_initial is not None else True
         final_gutter = gutter if gutter is not None else "4.8mm"
-        final_font_size = font_size if font_size is not None else "9pt"
+        final_font_size = font_size if font_size is not None else "10pt"
         default_leading = "0.35em"
     elif fmt == "br1":
         final_columns = columns if columns is not None else 1
@@ -2683,13 +2685,17 @@ def convert_txt_to_pdf(
     is_rtfd = abs_input.lower().endswith(".rtfd")
     is_rtf = is_rtfd or abs_input.lower().endswith(".rtf")
 
-    # Dynamische Schriftgrößen: 6pt bis 12pt (Hauptüberschrift bei atk1: Großbuchstaben +8pt, Kleinbuchstaben +6pt; sonst +6pt, Bildunterschriften -2pt)
+    # Dynamische Schriftgrößen: 6pt bis 12pt (Hauptüberschrift bei atk2: 36pt, bei atk1: +10pt, sonst +6pt, Bildunterschriften -2pt)
     m = re.search(r"([\d.]+)", str(final_font_size))
-    raw_pt = float(m.group(1)) if m else (9.0 if fmt in ("atk1", "atk2", "atk") else 12.0)
+    raw_pt = float(m.group(1)) if m else (10.0 if fmt in ("atk2", "atk") else (9.0 if fmt == "atk1" else 12.0))
     base_pt = max(6.0, min(raw_pt, 12.0))
     final_font_size = f"{base_pt:g}pt"
-    title_offset = 10.0 if fmt == "atk1" else 6.0
-    title_size = f"{base_pt + title_offset:g}pt"
+    if fmt == "atk2":
+        title_size = "36pt"
+    elif fmt == "atk1":
+        title_size = f"{base_pt + 10.0:g}pt"
+    else:
+        title_size = f"{base_pt + 6.0:g}pt"
     caption_size = f"{max(base_pt - 2.0, 3.0):g}pt"
     hanging_indent = "12.7mm" if final_columns == 1 else "6mm"
 
@@ -2813,16 +2819,27 @@ def convert_txt_to_pdf(
 
     columns_directive = f"#set columns(gutter: {final_gutter})\n" if final_columns > 1 else ""
 
-    if fmt == "atk1":
+    if fmt in ("atk1", "atk2"):
         author_part = f'\n        #v(1.4mm)\n        #block[#text(style: "italic", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(doc_author)}]]' if doc_author else ""
         date_part = f'\n        #v(1.0mm)\n        #block[#text(size: 8pt, fill: rgb("#000000"))[{escape_typst_line(doc_date)}]]' if doc_date else ""
         header_content = f"""#align(center)[
       #block[#text(font: {title_font_spec}, size: {title_size}, weight: "bold", fill: rgb("#000000"))[#strong[{escape_typst_line(doc_title)}]]]{author_part}{date_part}
     ]"""
-        top_header_box = f"""// Vollbreite-Titelbox ohne Trennlinie (atk1: 10pt größer als Text)
+        if fmt == "atk1":
+            top_header_box = f"""// Vollbreite-Titelbox ohne Trennlinie (atk1: 10pt größer als Text)
 #place(top, scope: "parent", float: true)[
   #block(width: 100%, inset: (bottom: 1.5mm))[
     {header_content}
+  ]
+]
+"""
+        else:  # atk2
+            top_header_box = f"""// Vollbreite-Titelbox mit Trennlinie (atk2: Didot 36pt, zentriert)
+#place(top, scope: "parent", float: true)[
+  #block(width: 100%, inset: (bottom: 2.5mm))[
+    {header_content}
+    #v(1.8mm)
+    #line(length: 100%, stroke: 0.5pt + rgb("#000000"))
   ]
 ]
 """
@@ -2956,12 +2973,12 @@ def main():
 
     fmt_help = (
         f"Format: {BLUE}atk1{RESET} (Artikel, 3 Spalten, Big Caslon, ohne Linie; Standard), "
-        f"{BLUE}atk2{RESET} (Artikel, 3 Spalten, PT Serif, mit Linie), "
+        f"{BLUE}atk2{RESET} (Artikel, 3 Spalten, PT Serif, mit Linie, Titel: Didot 36pt zentriert), "
         f"{BLUE}br2{RESET} (Bericht, 2 Spalten, PT Serif), "
         f"{BLUE}br1{RESET} (Bericht, 1 Spalte, PT Serif), "
         f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter)"
     )
-    size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 9pt bei atk1/atk2, 12pt bei br2/br1; entfällt bei apa)"
+    size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 9pt bei atk1, 10pt bei atk2, 12pt bei br2/br1; entfällt bei apa)"
     font_help = f"Schriftart ({BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, {BLUE}Didot{RESET}, {BLUE}Cochin{RESET}, {BLUE}Big Caslon{RESET}, {BLUE}Baskerville{RESET}, {BLUE}Roboto{RESET}, {BLUE}Monaco{RESET})"
 
     parser = argparse.ArgumentParser(
