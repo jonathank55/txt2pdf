@@ -1068,6 +1068,22 @@ FONT_DEFINITIONS = {
         "name": "Didot",
         "spec": '("Didot", "GFS Didot", "Theano Didot", "Bodoni 72", "PT Serif", "Times New Roman")',
     },
+    "cochin": {
+        "name": "Cochin",
+        "spec": '("Cochin", "Baskerville", "Libre Baskerville", "PT Serif", "Times New Roman")',
+    },
+    "big caslon": {
+        "name": "Big Caslon",
+        "spec": '("Big Caslon", "Libre Caslon Display", "Libre Caslon Text", "PT Serif", "Times New Roman")',
+    },
+    "caslon": {
+        "name": "Big Caslon",
+        "spec": '("Big Caslon", "Libre Caslon Display", "Libre Caslon Text", "PT Serif", "Times New Roman")',
+    },
+    "baskerville": {
+        "name": "Baskerville",
+        "spec": '("Baskerville", "Libre Baskerville", "Baskerville Old Face", "PT Serif", "Times New Roman")',
+    },
 }
 
 def resolve_font_spec(font_arg: str = None, fmt: str = "br2") -> Tuple[str, str]:
@@ -1099,13 +1115,13 @@ def resolve_heading_font_spec(fmt: str, body_font_spec: str) -> str:
     return body_font_spec
 
 def install_core_fonts() -> bool:
-    """Überprüft und installiert fehlende Kernschriftarten (PT Serif, Roboto, GFS Didot) für Typst."""
+    """Überprüft und installiert fehlende Kernschriftarten (PT Serif, Roboto, GFS Didot, Libre Baskerville, Libre Caslon) für Typst."""
     home = os.path.expanduser("~")
     is_mac = (sys.platform == "darwin")
     font_dir = os.path.join(home, "Library", "Fonts") if is_mac else os.path.join(home, ".local", "share", "fonts")
     os.makedirs(font_dir, exist_ok=True)
 
-    print("Prüfe Kernschriftarten für txt2pdf (Times New Roman, PT Serif, Optima, Roboto, Monaco, Didot)...")
+    print("Prüfe Kernschriftarten für txt2pdf (Times New Roman, PT Serif, Optima, Roboto, Monaco, Didot, Cochin, Big Caslon, Baskerville)...")
 
     if is_mac and shutil.which("brew"):
         try:
@@ -1124,6 +1140,11 @@ def install_core_fonts() -> bool:
         "PT_Serif-Web-Italic.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/ptserif/PT_Serif-Web-Italic.ttf",
         "PT_Serif-Web-BoldItalic.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/ptserif/PT_Serif-Web-BoldItalic.ttf",
         "GFSDidot-Regular.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/gfsdidot/GFSDidot-Regular.ttf",
+        "LibreBaskerville[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/librebaskerville/LibreBaskerville%5Bwght%5D.ttf",
+        "LibreBaskerville-Italic[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/librebaskerville/LibreBaskerville-Italic%5Bwght%5D.ttf",
+        "LibreCaslonText[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/librecaslontext/LibreCaslonText%5Bwght%5D.ttf",
+        "LibreCaslonText-Italic[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/librecaslontext/LibreCaslonText-Italic%5Bwght%5D.ttf",
+        "LibreCaslonDisplay-Regular.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/librecaslondisplay/LibreCaslonDisplay-Regular.ttf",
     }
 
     import urllib.request
@@ -1249,7 +1270,7 @@ def format_figure_typst(img_path: str, caption_title: str = "", source: str = ""
         f"]\n#v(2.5mm)\n"
     )
 
-def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str = "6pt", use_initial: bool = True, doc_dir: str = "", hanging_indent: str = "6mm", heading_font_spec: str = '("PT Serif", "EB Garamond", "Times New Roman")') -> Tuple[str, List[str], List[str], str]:
+def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str = "6pt", use_initial: bool = True, doc_dir: str = "", hanging_indent: str = "6mm") -> Tuple[str, List[str], List[str], str]:
     """Wandelt Textzeilen in Typst-Code um, verarbeitet Überschriften, trennt APA-Zitate für die Extraseite und extrahiert Links."""
     full_raw_text = "\n".join(raw_lines)
     all_urls = extract_urls_from_text(full_raw_text)
@@ -2758,7 +2779,7 @@ def convert_txt_to_pdf(
             body_lines = translated_body
 
         body_text, urls, explicit_bib_entries, bib_heading_title = parse_body_to_typst(
-            body_lines, images=images, caption_size=caption_size, use_initial=final_initial, doc_dir=doc_dir, hanging_indent=hanging_indent, heading_font_spec=heading_font_spec
+            body_lines, images=images, caption_size=caption_size, use_initial=final_initial, doc_dir=doc_dir, hanging_indent=hanging_indent
         )
 
     if is_rtf:
@@ -2938,12 +2959,12 @@ def main():
     fmt_help = (
         f"Format: {BLUE}br2{RESET} (Bericht, 2 Spalten, Optima; Standard), "
         f"{BLUE}br1{RESET} (Bericht, 1 Spalte, PT Serif), "
-        f"{BLUE}atk1{RESET} (Artikel, 3 Spalten, Optima, ohne Linie, Titel & Überschriften: Didot in Großbuchstaben), "
+        f"{BLUE}atk1{RESET} (Artikel, 3 Spalten, Optima, ohne Linie, Titel: Didot), "
         f"{BLUE}atk2{RESET} (Artikel, 3 Spalten, PT Serif, mit Linie), "
         f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter)"
     )
     size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 12pt bei br2/br1, 9pt bei atk1/atk2; entfällt bei apa)"
-    font_help = f"Schriftart ({BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, {BLUE}Didot{RESET}, {BLUE}Roboto{RESET}, {BLUE}Monaco{RESET})"
+    font_help = f"Schriftart ({BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, {BLUE}Didot{RESET}, {BLUE}Cochin{RESET}, {BLUE}Big Caslon{RESET}, {BLUE}Baskerville{RESET}, {BLUE}Roboto{RESET}, {BLUE}Monaco{RESET})"
 
     parser = argparse.ArgumentParser(
         prog="txt2pdf",

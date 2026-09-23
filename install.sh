@@ -121,6 +121,55 @@ else
     echo -e "${GREEN}==>${NC} Didot ist bereits vorhanden."
 fi
 
+# 3d. Prüfe und installiere Schriftart Baskerville / Libre Baskerville
+echo -e "${BLUE}==>${NC} Prüfe Schriftart Baskerville..."
+BASKERVILLE_INSTALLED=false
+
+if command -v typst &>/dev/null && typst fonts 2>/dev/null | grep -qi "Baskerville"; then
+    BASKERVILLE_INSTALLED=true
+fi
+
+if [ -f "$FONTS_DIR/LibreBaskerville[wght].ttf" ]; then
+    BASKERVILLE_INSTALLED=true
+fi
+
+if [ "$BASKERVILLE_INSTALLED" = false ]; then
+    echo -e "${BLUE}==>${NC} Installiere Libre Baskerville nach $FONTS_DIR..."
+    curl -fsSL "https://raw.githubusercontent.com/google/fonts/main/ofl/librebaskerville/LibreBaskerville%5Bwght%5D.ttf" -o "$FONTS_DIR/LibreBaskerville[wght].ttf" 2>/dev/null || true
+    curl -fsSL "https://raw.githubusercontent.com/google/fonts/main/ofl/librebaskerville/LibreBaskerville-Italic%5Bwght%5D.ttf" -o "$FONTS_DIR/LibreBaskerville-Italic[wght].ttf" 2>/dev/null || true
+    if command -v fc-cache &>/dev/null; then
+        fc-cache -f "$FONTS_DIR" &>/dev/null || true
+    fi
+    echo -e "${GREEN}==>${NC} Baskerville (Libre Baskerville) wurde erfolgreich eingerichtet."
+else
+    echo -e "${GREEN}==>${NC} Baskerville ist bereits vorhanden."
+fi
+
+# 3e. Prüfe und installiere Schriftart Big Caslon / Libre Caslon
+echo -e "${BLUE}==>${NC} Prüfe Schriftart Caslon..."
+CASLON_INSTALLED=false
+
+if command -v typst &>/dev/null && typst fonts 2>/dev/null | grep -qi "Caslon"; then
+    CASLON_INSTALLED=true
+fi
+
+if [ -f "$FONTS_DIR/LibreCaslonText[wght].ttf" ] || [ -f "$FONTS_DIR/LibreCaslonDisplay-Regular.ttf" ]; then
+    CASLON_INSTALLED=true
+fi
+
+if [ "$CASLON_INSTALLED" = false ]; then
+    echo -e "${BLUE}==>${NC} Installiere Libre Caslon nach $FONTS_DIR..."
+    curl -fsSL "https://raw.githubusercontent.com/google/fonts/main/ofl/librecaslontext/LibreCaslonText%5Bwght%5D.ttf" -o "$FONTS_DIR/LibreCaslonText[wght].ttf" 2>/dev/null || true
+    curl -fsSL "https://raw.githubusercontent.com/google/fonts/main/ofl/librecaslontext/LibreCaslonText-Italic%5Bwght%5D.ttf" -o "$FONTS_DIR/LibreCaslonText-Italic[wght].ttf" 2>/dev/null || true
+    curl -fsSL "https://raw.githubusercontent.com/google/fonts/main/ofl/librecaslondisplay/LibreCaslonDisplay-Regular.ttf" -o "$FONTS_DIR/LibreCaslonDisplay-Regular.ttf" 2>/dev/null || true
+    if command -v fc-cache &>/dev/null; then
+        fc-cache -f "$FONTS_DIR" &>/dev/null || true
+    fi
+    echo -e "${GREEN}==>${NC} Caslon (Libre Caslon) wurde erfolgreich eingerichtet."
+else
+    echo -e "${GREEN}==>${NC} Caslon ist bereits vorhanden."
+fi
+
 # 4. Prüfe und installiere DeepL Python-Bibliothek
 echo -e "${BLUE}==>${NC} Prüfe DeepL-Bibliothek..."
 if ! python3 -c "import deepl" &>/dev/null; then
