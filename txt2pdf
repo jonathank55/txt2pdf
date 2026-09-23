@@ -1172,9 +1172,10 @@ def generate_bibliography_typst(
     font_spec: str = '("PT Serif", "EB Garamond", "Times New Roman")',
     font_size: str = "8pt",
     title_size: str = "14pt",
-    context_text: str = ""
+    context_text: str = "",
+    hanging_indent: str = "12.7mm"
 ) -> str:
-    """Erzeugt das standardkonforme APA-Literaturverzeichnis als einspaltige, linksbündige Extraseite mit anklickbaren Links."""
+    """Erzeugt das standardkonforme APA-Literaturverzeichnis im Blocktext mit vorangestellter Trennlinie und zentrierter Überschrift."""
     citations = []
     seen_formatted = set()
     seen_urls = set()
@@ -1237,9 +1238,9 @@ def generate_bibliography_typst(
 #show link: set text(fill: rgb("#0b57d0"))
 #set text(font: {font_spec}, size: {font_size})
 #set par(
-  hanging-indent: 12.7mm,
+  hanging-indent: {hanging_indent},
   leading: 0.65em,
-  justify: false
+  justify: true
 )
 
 {body}
@@ -2813,7 +2814,8 @@ def convert_txt_to_pdf(
         font_spec=body_font_spec,
         font_size=final_font_size,
         title_size=bib_title_size,
-        context_text=raw_doc_context
+        context_text=raw_doc_context,
+        hanging_indent=hanging_indent
     )
 
     columns_directive = f"#set columns(gutter: {final_gutter})\n" if final_columns > 1 else ""
