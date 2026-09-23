@@ -849,7 +849,9 @@ def format_citation_to_apa_7(raw_citation: str, context_text: str = "") -> Dict[
     formatted = f"{author_part} {date_part} {title_part}{source_part}{link_part}".strip()
     return {
         "sort_key": author.lower(),
-        "formatted": formatted
+        "formatted": formatted,
+        "clean_url": clean_url,
+        "title_key": re.sub(r"[^a-z0-9]", "", title.lower()) if title else ""
     }
 
 def resolve_apa_citation(url: str, context_text: str = "") -> Dict[str, str]:
@@ -868,6 +870,8 @@ def generate_bibliography_typst(
     """Erzeugt das standardkonforme APA-Literaturverzeichnis als einspaltige, linksbündige Extraseite mit anklickbaren Links."""
     citations = []
     seen_formatted = set()
+    seen_urls = set()
+    seen_titles = set()
 
     raw_candidates = []
     if explicit_entries:
@@ -885,9 +889,23 @@ def generate_bibliography_typst(
         cit = format_citation_to_apa_7(item, context_text=context_text)
         if cit and cit.get("formatted"):
             norm_f = cit["formatted"].strip().lower()
-            if norm_f not in seen_formatted:
-                seen_formatted.add(norm_f)
-                citations.append(cit)
+            c_url = cit.get("clean_url", "").strip().lower()
+            t_key = cit.get("title_key", "").strip().lower()
+            
+            # Duplikaterkennung über formatierten String, identische URL oder identischen Titelstamm
+            if norm_f in seen_formatted:
+                continue
+            if c_url and c_url in seen_urls:
+                continue
+            if t_key and len(t_key) >= 15 and t_key in seen_titles:
+                continue
+                
+            seen_formatted.add(norm_f)
+            if c_url:
+                seen_urls.add(c_url)
+            if t_key and len(t_key) >= 15:
+                seen_titles.add(t_key)
+            citations.append(cit)
 
     if not citations:
         return ""
@@ -997,6 +1015,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
     explicit_bib_entries = []
     bib_heading_title = "Literaturverzeichnis"
     first_body_para_done = False
+    heading_2_done = False
     in_bibliography_section = False
     has_explicit_bibliography = False
 
@@ -1191,28 +1210,23 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             continue
 
         # 10b. Überschrift 2:
-        # NUR AM ANFANG: 1-2 Sätze mit Punkt am Ende
-        # ÜBERALL ANDERS: Genau 1 Satz mit Punkt am Ende
-        is_at_beginning = not first_body_para_done
-        if is_at_beginning:
+        # AUSSCHLIESSLICH AM ANFANG vor dem ersten Fließtextabsatz: 1-2 Sätze mit Punkt am Ende.
+        # Sobald eine Überschrift 2 oder der erste Fließtextabsatz verarbeitet wurde,
+        # darf im gesamten restlichen Dokument KEINE Überschrift 2 mehr vorkommen!
+        is_heading_2 = False
+        if not heading_2_done and not first_body_para_done:
             valid_sentence_structure = is_one_or_two_sentences(flat_text)
-            max_len = 500
-            max_lines = 6
-        else:
-            valid_sentence_structure = is_single_sentence(flat_text)
-            max_len = 350
-            max_lines = 3
-
-        is_heading_2 = (
-            valid_sentence_structure and
-            15 <= len(flat_text) <= max_len and
-            len(lines_in_para) <= max_lines and
-            not is_apa_citation(flat_text) and
-            not flat_text.startswith(("http://", "https://", "www.", "doi:")) and
-            not re.match(r"^https?://", flat_text) and
-            not any(flat_text.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "dass "])
-        )
+            is_heading_2 = (
+                valid_sentence_structure and
+                15 <= len(flat_text) <= 500 and
+                len(lines_in_para) <= 6 and
+                not is_apa_citation(flat_text) and
+                not flat_text.startswith(("http://", "https://", "www.", "doi:")) and
+                not re.match(r"^https?://", flat_text) and
+                not any(flat_text.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "dass "])
+            )
         if is_heading_2:
+            heading_2_done = True
             h_text = format_content_to_typst(flat_text)
             top_v = "#v(2.0mm)\n" if typst_elements else ""
             typst_elements.append(
@@ -1224,7 +1238,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         escaped_para = format_content_to_typst(flat_text)
         if use_initial and not first_body_para_done:
             escaped_para = apply_initial_to_typst_element(escaped_para)
-            first_body_para_done = True
+        first_body_para_done = True
         typst_elements.append(escaped_para + "\n")
 
     # Falls Bilder über -i übergeben wurden, diese am Ende anhängen
@@ -1511,6 +1525,7 @@ def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_autho
     rtf_bib_entries = []
     bib_heading_title = "Literaturverzeichnis"
     first_body_para_done = False
+    heading_2_done = False
     in_bib_section = False
     has_explicit_bib = False
     bib_header_regex = re.compile(r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library)\b:?\s*$", re.IGNORECASE)
@@ -1604,22 +1619,18 @@ def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_autho
         )
 
         # Überschrift 2:
-        # NUR AM ANFANG: 1-2 Sätze mit Punkt am Ende
-        # ÜBERALL ANDERS: Genau 1 Satz mit Punkt am Ende
-        is_at_beginning_rtf = not first_body_para_done
-        if is_at_beginning_rtf:
+        # AUSSCHLIESSLICH AM ANFANG vor dem ersten Fließtextabsatz: 1-2 Sätze mit Punkt am Ende.
+        # Sobald eine Überschrift 2 oder der erste Fließtextabsatz verarbeitet wurde,
+        # darf im gesamten restlichen Dokument KEINE Überschrift 2 mehr vorkommen!
+        is_heading_2 = False
+        if not heading_2_done and not first_body_para_done:
             valid_sentence_rtf = is_one_or_two_sentences(p_plain_clean)
-            max_len_rtf = 500
-        else:
-            valid_sentence_rtf = is_single_sentence(p_plain_clean)
-            max_len_rtf = 350
-
-        is_heading_2 = (
-            valid_sentence_rtf and
-            15 <= len(p_plain_clean) <= max_len_rtf and
-            not is_apa_citation(p_plain_clean) and
-            not any(p_plain_clean.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "dass "])
-        )
+            is_heading_2 = (
+                valid_sentence_rtf and
+                15 <= len(p_plain_clean) <= 500 and
+                not is_apa_citation(p_plain_clean) and
+                not any(p_plain_clean.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "dass "])
+            )
 
         if p['align'] == 'center':
             typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    {content}\n  ]\n]")
@@ -1630,6 +1641,7 @@ def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_autho
             top_v = "#v(2.5mm)\n" if typst_blocks else ""
             typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #strong[{inner_c}]\n  ]\n]\n#v(1.2mm)")
         elif is_heading_2:
+            heading_2_done = True
             inner_c = t_trimmed[8:-1] if is_fully_bold else content
             top_v = "#v(2.0mm)\n" if typst_blocks else ""
             typst_blocks.append(f"{top_v}#par(justify: true)[\n  #strong[{inner_c}]\n]\n#v(1.0mm)")
@@ -1637,9 +1649,9 @@ def parse_rtf_to_typst(rtf_path: str, expected_title: str = None, expected_autho
             if use_initial and not first_body_para_done:
                 content_init = apply_initial_to_typst_element(content)
                 typst_blocks.append(content_init)
-                first_body_para_done = True
             else:
                 typst_blocks.append(content)
+            first_body_para_done = True
 
     # Falls Bilder über -i übergeben wurden, diese am Ende anhängen
     if images:
