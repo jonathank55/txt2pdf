@@ -1229,13 +1229,11 @@ def generate_bibliography_typst(
 
     return f"""
 #colbreak()
-#v(1.8em)
-#line(length: 100%, stroke: 0.5pt + rgb("#000000"))
-#v(1.2em)
+#v(0.8em)
 #align(center)[
   #text(size: {title_size}, weight: "bold", fill: rgb("#000000"))[{escape_typst_line(bib_title)}]
 ]
-#v(1.2em)
+#v(0.8em)
 
 #show link: set text(fill: rgb("#0b57d0"))
 #set text(font: {font_spec}, size: {font_size})
