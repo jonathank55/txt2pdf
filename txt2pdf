@@ -1173,9 +1173,10 @@ def generate_bibliography_typst(
     font_size: str = "8pt",
     title_size: str = "14pt",
     context_text: str = "",
-    hanging_indent: str = "12.7mm"
+    hanging_indent: str = "12.7mm",
+    leading: str = "0.35em"
 ) -> str:
-    """Erzeugt das standardkonforme APA-Literaturverzeichnis im Blocktext mit vorangestellter Trennlinie und zentrierter Überschrift."""
+    """Erzeugt das standardkonforme APA-Literaturverzeichnis im Blocktext mit vorangestellter Trennlinie, zentrierter Überschrift und synchronisiertem Zeilenabstand."""
     citations = []
     seen_formatted = set()
     seen_urls = set()
@@ -1239,7 +1240,8 @@ def generate_bibliography_typst(
 #set text(font: {font_spec}, size: {font_size})
 #set par(
   hanging-indent: {hanging_indent},
-  leading: 0.65em,
+  leading: {leading},
+  spacing: {leading},
   justify: true
 )
 
@@ -2815,7 +2817,8 @@ def convert_txt_to_pdf(
         font_size=final_font_size,
         title_size=bib_title_size,
         context_text=raw_doc_context,
-        hanging_indent=hanging_indent
+        hanging_indent=hanging_indent,
+        leading=final_leading
     )
 
     columns_directive = f"#set columns(gutter: {final_gutter})\n" if final_columns > 1 else ""
