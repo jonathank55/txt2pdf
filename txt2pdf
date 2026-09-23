@@ -2615,24 +2615,31 @@ def convert_txt_to_pdf(
         final_initial = use_initial if use_initial is not None else True
         final_gutter = gutter if gutter is not None else "4.8mm"
         final_font_size = font_size if font_size is not None else "9pt"
+        default_leading = "0.8em"
     elif fmt == "atk2":
         final_columns = columns if columns is not None else 3
         final_initial = use_initial if use_initial is not None else True
         final_gutter = gutter if gutter is not None else "4.8mm"
         final_font_size = font_size if font_size is not None else "9pt"
+        default_leading = "0.35em"
     elif fmt == "br1":
         final_columns = columns if columns is not None else 1
         final_initial = use_initial if use_initial is not None else False
         final_gutter = gutter if gutter is not None else "0mm"
         final_font_size = font_size if font_size is not None else "12pt"
+        default_leading = "0.35em"
     else:  # br2 (Standard: 2 Spalten, 12pt Textgröße, Optima)
         final_columns = columns if columns is not None else 2
         final_initial = use_initial if use_initial is not None else False
         final_gutter = gutter if gutter is not None else "5.2mm"
         final_font_size = font_size if font_size is not None else "12pt"
+        default_leading = "0.35em"
 
-    # Standardmäßiger einfacher Zeilenabstand (1-zeilig, 0.35em) im Fließtext für alle Formate (außer APA)
-    final_leading = leading if leading is not None else "0.35em"
+    if leading is not None:
+        s_lead = str(leading).strip()
+        final_leading = f"{s_lead}em" if re.match(r"^[0-9.]+$", s_lead) else s_lead
+    else:
+        final_leading = default_leading
 
     # Automatische Extraktion aus Dateinamen (z. B. "Titel : Autor" oder "Titel - Autor")
     file_title_candidate, file_author_candidate = parse_title_author_from_filename(base_name)
