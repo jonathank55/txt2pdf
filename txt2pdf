@@ -1256,37 +1256,66 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
 
     paragraphs = []
     current_lines = []
+    current_indent = False
 
     for line in raw_lines:
         s = line.strip()
         if not s:
             if current_lines:
-                paragraphs.append("\n".join(current_lines))
+                paragraphs.append({
+                    "text": "\n".join(current_lines),
+                    "has_indent": current_indent
+                })
                 current_lines = []
+                current_indent = False
             continue
+
+        is_indented_line = bool(line.startswith("\t") or line.startswith("  ") or (len(line) > len(line.lstrip()) and line.strip()))
 
         if bib_header_exact_regex.match(s):
             if current_lines:
-                paragraphs.append("\n".join(current_lines))
+                paragraphs.append({
+                    "text": "\n".join(current_lines),
+                    "has_indent": current_indent
+                })
                 current_lines = []
-            paragraphs.append(s)
+                current_indent = False
+            paragraphs.append({
+                "text": s,
+                "has_indent": False
+            })
             continue
 
         m_pref = bib_header_prefix_regex.match(s)
         if m_pref:
             if current_lines:
-                paragraphs.append("\n".join(current_lines))
+                paragraphs.append({
+                    "text": "\n".join(current_lines),
+                    "has_indent": current_indent
+                })
                 current_lines = []
-            paragraphs.append(m_pref.group(1).strip())
+                current_indent = False
+            paragraphs.append({
+                "text": m_pref.group(1).strip(),
+                "has_indent": False
+            })
             rest_line = m_pref.group(2).strip()
             if rest_line:
-                paragraphs.append(rest_line)
+                paragraphs.append({
+                    "text": rest_line,
+                    "has_indent": is_indented_line
+                })
             continue
 
+        if not current_lines:
+            current_indent = is_indented_line
         current_lines.append(s)
 
     if current_lines:
-        paragraphs.append("\n".join(current_lines))
+        paragraphs.append({
+            "text": "\n".join(current_lines),
+            "has_indent": current_indent
+        })
 
     image_extensions = (".png", ".jpg", ".jpeg", ".webp", ".pdf", ".gif", ".svg", ".tiff", ".tif")
     typst_elements = []
@@ -1307,7 +1336,9 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
     bib_header_regex = re.compile(r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library)\b:?\s*$", re.IGNORECASE)
     bib_header_inline_regex = re.compile(r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library)\b:?\s*(.*)$", re.IGNORECASE)
 
-    for i, para in enumerate(paragraphs):
+    for i, p_info in enumerate(paragraphs):
+        para = p_info["text"]
+        para_has_indent = p_info["has_indent"]
         lines_in_para = para.splitlines()
         first_line = lines_in_para[0].strip()
         flat_text = " ".join(l.strip() for l in lines_in_para).strip()
@@ -1516,6 +1547,9 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         escaped_para = format_content_to_typst(flat_text)
         if use_initial and not first_body_para_done:
             escaped_para = apply_initial_to_typst_element(escaped_para)
+        else:
+            if para_has_indent:
+                escaped_para = f"#h(3.8mm){escaped_para}"
         first_body_para_done = True
         typst_elements.append(escaped_para + "\n")
 
@@ -1562,6 +1596,7 @@ class RTFHTMLToTypstParser(HTMLParser):
         self.in_cell = False
         self.cell_content = []
         self.urls = []
+        self.curr_indent = False
 
     def parse_css(self, text: str):
         rules = re.findall(r'(?:[a-zA-Z0-9_\-]+\.)?([a-zA-Z0-9_\-]+)\s*\{([^}]+)\}', text)
@@ -1595,11 +1630,17 @@ class RTFHTMLToTypstParser(HTMLParser):
         elif 'text-align: right' in combined_style or 'text-align:right' in combined_style:
             align = 'right'
 
+        m_indent = re.search(r'text-indent:\s*([0-9.]+)\s*(px|pt|em|rem|mm|cm)?', combined_style)
+        has_indent = bool(m_indent and float(m_indent.group(1)) > 0)
+        if 'apple-tab-span' in cls_val.lower() or 'apple-tab-span' in style_val.lower():
+            self.curr_indent = True
+
         if tag in ('p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'):
             self.curr_buf = []
             self.curr_plain = []
             self.curr_align = align
             self.curr_heading = tag in ('h1', 'h2', 'h3', 'h4')
+            self.curr_indent = has_indent
             self.tag_stack.append((tag, []))
         elif tag == 'img':
             src = attr_dict.get('src', '')
@@ -1701,10 +1742,12 @@ class RTFHTMLToTypstParser(HTMLParser):
                     'typst': inner_typst,
                     'plain': inner_plain,
                     'align': self.curr_align,
-                    'heading': self.curr_heading
+                    'heading': self.curr_heading,
+                    'has_indent': self.curr_indent
                 })
             self.curr_buf = []
             self.curr_plain = []
+            self.curr_indent = False
         elif tag in ('span', 'b', 'strong', 'i', 'em', 'u', 's', 'strike', 'del', 'sub', 'super', 'sup', 'a'):
             if self.tag_stack:
                 popped_tag, wrappers = self.tag_stack.pop()
@@ -1943,6 +1986,8 @@ def parse_rtf_to_typst(
                 content_init = apply_initial_to_typst_element(content)
                 typst_blocks.append(content_init)
             else:
+                if p.get('has_indent'):
+                    content = f"#h(3.8mm){content}"
                 typst_blocks.append(content)
             first_body_para_done = True
 
