@@ -968,7 +968,7 @@ def generate_bibliography_typst(
     bib_title: str = "Literaturverzeichnis",
     font_spec: str = '("PT Serif", "EB Garamond", "Times New Roman")',
     font_size: str = "8pt",
-    title_size: str = "12pt",
+    title_size: str = "14pt",
     context_text: str = ""
 ) -> str:
     """Erzeugt das standardkonforme APA-Literaturverzeichnis als einspaltige, linksbündige Extraseite mit anklickbaren Links."""
@@ -1589,7 +1589,7 @@ def parse_rtf_to_typst(
     expected_date: str = None,
     images: list = None,
     caption_size: str = "6pt",
-    title_size: str = "12pt",
+    title_size: str = "14pt",
     use_initial: bool = True,
     hanging_indent: str = "6mm",
     title_font_spec: str = '("PT Serif", "EB Garamond", "Times New Roman")',
@@ -2321,12 +2321,12 @@ def convert_txt_to_pdf(
     is_rtfd = abs_input.lower().endswith(".rtfd")
     is_rtf = is_rtfd or abs_input.lower().endswith(".rtf")
 
-    # Dynamische Schriftgrößen: 6pt bis 12pt (Hauptüberschrift verbindlich immer +4pt, Bildunterschriften -2pt)
+    # Dynamische Schriftgrößen: 6pt bis 12pt (Hauptüberschrift verbindlich immer +6pt, Bildunterschriften -2pt)
     m = re.search(r"([\d.]+)", str(final_font_size))
     raw_pt = float(m.group(1)) if m else 8.0
     base_pt = max(6.0, min(raw_pt, 12.0))
     final_font_size = f"{base_pt:g}pt"
-    title_size = f"{base_pt + 4.0:g}pt"
+    title_size = f"{base_pt + 6.0:g}pt"
     caption_size = f"{max(base_pt - 2.0, 3.0):g}pt"
     hanging_indent = "12.7mm" if final_columns == 1 else "6mm"
 
@@ -2496,7 +2496,7 @@ def convert_txt_to_pdf(
       #text(font: {title_font_spec}, size: {title_size}, weight: "bold", fill: rgb("#000000"))[{escape_typst_line(doc_title)}]{author_block}
     ]"""
 
-        top_header_box = f"""// Vollbreite-Titelbox mit Trennlinie (Titel dynamisch: Textgröße + 4pt)
+        top_header_box = f"""// Vollbreite-Titelbox mit Trennlinie (Titel dynamisch: Textgröße + 6pt)
 #place(top, scope: "parent", float: true)[
   #block(width: 100%, inset: (bottom: 2.5mm))[
     {header_content}

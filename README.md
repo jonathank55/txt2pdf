@@ -43,7 +43,7 @@ txt2pdf DATEI [OPTIONEN]
 - `-s GRÖßE`   : Fließtext-Größe (`6pt` bis `12pt`).
 - `-i BILD`    : Abbildung einbinden (Syntax `##Pfad/zur/Datei` direkt im Textdokument verwenden).
 - `-a AUTOR`   : Autor manuell überschreiben (wird kursiv in Schwarz gerendert).
-- `-t TITEL`   : Titel manuell überschreiben (Hauptüberschriften sind verbindlich 4pt größer als der Text).
+- `-t TITEL`   : Titel manuell überschreiben (Hauptüberschriften sind verbindlich 6pt größer als der Text).
 - `-d DATUM`   : Datum manuell überschreiben.
 - `-l SPRACHE` : Automatische Übersetzung via DeepL in die angegebene Zielsprache (`en`, `de`, etc.) vor dem Rendern.
 - `-o AUSGABE` : Zieldateipfad für das PDF festlegen.
