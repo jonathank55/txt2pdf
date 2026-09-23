@@ -1096,15 +1096,13 @@ def resolve_font_spec(font_arg: str = None, fmt: str = "br2") -> Tuple[str, str]
             return f'("{font_arg.strip()}", "Optima", "PT Serif", "Times New Roman")', font_arg.strip()
 
     if fmt == "atk1":
-        return FONT_DEFINITIONS["cochin"]["spec"], "Cochin"
-    elif fmt == "br2":
-        return FONT_DEFINITIONS["optima"]["spec"], "Optima"
-    elif fmt in ("atk2", "atk", "br1"):
+        return FONT_DEFINITIONS["big caslon"]["spec"], "Big Caslon"
+    elif fmt in ("br2", "atk2", "atk", "br1"):
         return FONT_DEFINITIONS["pt serif"]["spec"], "PT Serif"
     elif fmt == "apa":
         return FONT_DEFINITIONS["times new roman"]["spec"], "Times New Roman"
     else:
-        return FONT_DEFINITIONS["optima"]["spec"], "Optima"
+        return FONT_DEFINITIONS["big caslon"]["spec"], "Big Caslon"
 
 def resolve_title_font_spec(fmt: str, body_font_spec: str) -> str:
     """Löst die typografische Schriftartenspezifikation für die Hauptüberschrift (Titel) auf."""
@@ -2574,7 +2572,7 @@ def convert_txt_to_pdf(
     open_preview: bool = False,
     columns: int = None,
     font_family: str = None,
-    format_preset: str = "br2",
+    format_preset: str = "atk1",
     use_initial: bool = None,
     target_lang: str = None
 ) -> bool:
@@ -2593,8 +2591,8 @@ def convert_txt_to_pdf(
 
     os.makedirs(os.path.dirname(abs_output), exist_ok=True)
 
-    # Format-Profil auflösen (-f br2 | br1 | atk1 | atk2 | atk | apa; Standard: br2)
-    fmt_raw = (format_preset or "br2").lower().strip()
+    # Format-Profil auflösen (-f atk1 | atk2 | atk | br2 | br1 | apa; Standard: atk1)
+    fmt_raw = (format_preset or "atk1").lower().strip()
     if fmt_raw in ("atk1", "artikel1"):
         fmt = "atk1"
     elif fmt_raw in ("atk2", "artikel2"):
@@ -2957,13 +2955,13 @@ def main():
     RESET = "\033[0m"
 
     fmt_help = (
-        f"Format: {BLUE}br2{RESET} (Bericht, 2 Spalten, Optima; Standard), "
-        f"{BLUE}br1{RESET} (Bericht, 1 Spalte, PT Serif), "
-        f"{BLUE}atk1{RESET} (Artikel, 3 Spalten, Cochin, ohne Linie), "
+        f"Format: {BLUE}atk1{RESET} (Artikel, 3 Spalten, Big Caslon, ohne Linie; Standard), "
         f"{BLUE}atk2{RESET} (Artikel, 3 Spalten, PT Serif, mit Linie), "
+        f"{BLUE}br2{RESET} (Bericht, 2 Spalten, PT Serif), "
+        f"{BLUE}br1{RESET} (Bericht, 1 Spalte, PT Serif), "
         f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter)"
     )
-    size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 12pt bei br2/br1, 9pt bei atk1/atk2; entfällt bei apa)"
+    size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 9pt bei atk1/atk2, 12pt bei br2/br1; entfällt bei apa)"
     font_help = f"Schriftart ({BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, {BLUE}Didot{RESET}, {BLUE}Cochin{RESET}, {BLUE}Big Caslon{RESET}, {BLUE}Baskerville{RESET}, {BLUE}Roboto{RESET}, {BLUE}Monaco{RESET})"
 
     parser = argparse.ArgumentParser(
@@ -2973,7 +2971,7 @@ def main():
         add_help=False
     )
     parser.add_argument("-h", action="help", help="Hilfe anzeigen")
-    parser.add_argument("-f", dest="format_preset", metavar="FORMAT", default="br2", help=fmt_help)
+    parser.add_argument("-f", dest="format_preset", metavar="FORMAT", default="atk1", help=fmt_help)
     parser.add_argument("-z", dest="font_family", metavar="SCHRIFT", default=None, help=font_help)
     parser.add_argument("-s", dest="size", metavar="GRÖßE", default=None, help=size_help)
     img_help = f"Abbildung einbetten ({BLUE}##Pfad/zur/Datei{RESET} in .txt/.md an gewünschter Stelle; .png/.jpg/.jpeg/.webp/.pdf)"
@@ -3004,7 +3002,7 @@ def main():
     final_date = args.date
     final_target_lang = args.target_lang
     all_images = args.images or []
-    fmt = (args.format_preset or "br2").lower().strip()
+    fmt = (args.format_preset or "atk1").lower().strip()
     final_font_size = args.size if fmt != "apa" else None
     final_font = args.font_family
 
