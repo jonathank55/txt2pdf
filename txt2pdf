@@ -2615,7 +2615,7 @@ def convert_txt_to_pdf(
         final_initial = use_initial if use_initial is not None else True
         final_gutter = gutter if gutter is not None else "4.8mm"
         final_font_size = font_size if font_size is not None else "9pt"
-        default_leading = "0.8em"
+        default_leading = "0.28em"  # Faktor 0,8 (0.8 * 0.35em = 0.28em)
     elif fmt == "atk2":
         final_columns = columns if columns is not None else 3
         final_initial = use_initial if use_initial is not None else True
@@ -2637,7 +2637,17 @@ def convert_txt_to_pdf(
 
     if leading is not None:
         s_lead = str(leading).strip()
-        final_leading = f"{s_lead}em" if re.match(r"^[0-9.]+$", s_lead) else s_lead
+        m_num = re.match(r"^([0-9.]+)(em|pt|mm)?$", s_lead)
+        if m_num:
+            val = float(m_num.group(1))
+            unit = m_num.group(2)
+            if not unit:
+                # Numerischer Faktor: 1.0 entspricht Basis 0.35em, 0.8 entspricht 0.28em
+                final_leading = f"{val * 0.35:g}em" if val <= 2.5 else f"{val}pt"
+            else:
+                final_leading = f"{val:g}{unit}"
+        else:
+            final_leading = s_lead
     else:
         final_leading = default_leading
 
