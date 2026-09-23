@@ -413,92 +413,237 @@ def extract_authors_from_html(html_text: str) -> List[str]:
                         authors.append(sp)
     return authors
 
+CITATION_CACHE_FILE = os.path.expanduser("~/.gemini/config/cache/citations_cache.json")
+
+def load_citation_cache() -> Dict[str, dict]:
+    """Lädt gecachte Zitationsmetadaten."""
+    if os.path.exists(CITATION_CACHE_FILE):
+        try:
+            with open(CITATION_CACHE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def save_citation_cache(cache: Dict[str, dict]):
+    """Speichert Zitationsmetadaten atomar im Cache."""
+    try:
+        os.makedirs(os.path.dirname(CITATION_CACHE_FILE), exist_ok=True)
+        with open(CITATION_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+def is_invalid_author(author: Optional[str]) -> bool:
+    """Prüft, ob ein Autorenstring ungültig ist (z. B. Resolver-Domain oder Platzhalter)."""
+    if not author:
+        return True
+    a_low = author.lower().strip().rstrip(".")
+    if a_low in ("doi.org", "dx.doi.org", "doi", "crossref", "datacite", "o. a.", "ohne autor", "n. a.", "untitled", "unknown"):
+        return True
+    if re.match(r"^10\.\d{4,9}/", a_low):
+        return True
+    return False
+
+def is_invalid_title(title: Optional[str]) -> bool:
+    """Prüft, ob ein Titel ungültig ist (z. B. Slug oder DOI-Fragment)."""
+    if not title:
+        return True
+    t_clean = title.strip().rstrip(".")
+    t_low = t_clean.lower()
+    if t_low in ("untitled", "ohne titel", "doi.org", "dx.doi.org"):
+        return True
+    if re.match(r"^(?:s\d{4,5}|\d{4,6}\.\d+|10\.\d{4,9})", t_low):
+        return True
+    return False
+
+def fetch_doi_metadata_resilient(doi_str: str, clean_url: str) -> Optional[Dict[str, str]]:
+    """Fragt Metadaten zu einer DOI über eine mehrstufige Kaskade (CSL-JSON, Crossref, DataCite) resilient ab."""
+    doi_clean = doi_str.strip().strip("/")
+
+    # Stufe 1: CSL-JSON über https://doi.org/
+    try:
+        req_url = f"https://doi.org/{doi_clean}"
+        req = urllib.request.Request(req_url, headers={
+            "Accept": "application/vnd.citationstyles.csl+json",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 (mailto:jonathanklatchko@gmail.com)"
+        })
+        with urllib.request.urlopen(req, timeout=5.0) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            title = data.get("title", "")
+            if data.get("subtitle"):
+                title = f"{title}: {data['subtitle']}"
+            authors = data.get("author", [])
+            auth_list = []
+            for a in authors[:20]:
+                fam = a.get("family", "")
+                giv = a.get("given", "")
+                if fam:
+                    init = f"{giv[0]}." if giv else ""
+                    auth_list.append(f"{fam}, {init}".strip())
+                elif a.get("name") or a.get("literal"):
+                    lit = (a.get("name") or a.get("literal")).strip()
+                    is_org = any(w in lit.lower() for w in ["institut", "institute", "organization", "organisation", "gmbh", "association", "office", "rki", "who", "bundesamt", "center", "centre"])
+                    if not is_org and (" " in lit or "," in lit):
+                        apa_lit = parse_author_name_to_apa(lit)
+                        if apa_lit:
+                            auth_list.append(apa_lit)
+            if len(authors) > 20:
+                last = authors[-1]
+                last_fam = last.get('family', '')
+                last_init = f"{last.get('given', '')[0]}." if last.get('given') else ""
+                auth_str = ", ".join(auth_list[:19]) + ", ... " + f"{last_fam}, {last_init}".strip()
+            elif len(auth_list) > 1:
+                auth_str = ", ".join(auth_list[:-1]) + " & " + auth_list[-1]
+            elif auth_list:
+                auth_str = auth_list[0]
+            else:
+                auth_str = ""
+
+            year = ""
+            if "issued" in data and "date-parts" in data["issued"]:
+                year = str(data["issued"]["date-parts"][0][0])
+
+            publisher = data.get("publisher", "")
+            container = data.get("container-title", "")
+            source_val = container if container else publisher
+
+            if title and not is_invalid_title(title):
+                return {
+                    "author": auth_str if not is_invalid_author(auth_str) else "",
+                    "year": year,
+                    "title": title,
+                    "source": source_val,
+                    "url": clean_url
+                }
+    except Exception:
+        pass
+
+    # Stufe 2: Crossref REST-API (https://api.crossref.org/works/{doi})
+    try:
+        req_url = f"https://api.crossref.org/works/{doi_clean}"
+        req = urllib.request.Request(req_url, headers={
+            "User-Agent": "Antigravity/1.0 (mailto:jonathanklatchko@gmail.com)"
+        })
+        with urllib.request.urlopen(req, timeout=5.0) as resp:
+            data = json.loads(resp.read().decode("utf-8")).get("message", {})
+            titles = data.get("title", [])
+            title = titles[0] if titles else ""
+            if data.get("subtitle") and data["subtitle"]:
+                title = f"{title}: {data['subtitle'][0]}"
+            authors = data.get("author", [])
+            auth_list = []
+            for a in authors[:20]:
+                fam = a.get("family", "")
+                giv = a.get("given", "")
+                if fam:
+                    init = f"{giv[0]}." if giv else ""
+                    auth_list.append(f"{fam}, {init}".strip())
+                elif a.get("name"):
+                    auth_list.append(a["name"].strip())
+            if len(authors) > 20:
+                last = authors[-1]
+                last_fam = last.get('family', '')
+                last_init = f"{last.get('given', '')[0]}." if last.get('given') else ""
+                auth_str = ", ".join(auth_list[:19]) + ", ... " + f"{last_fam}, {last_init}".strip()
+            elif len(auth_list) > 1:
+                auth_str = ", ".join(auth_list[:-1]) + " & " + auth_list[-1]
+            elif auth_list:
+                auth_str = auth_list[0]
+            else:
+                auth_str = ""
+
+            year = ""
+            date_info = data.get("published-print") or data.get("issued") or data.get("created")
+            if date_info and "date-parts" in date_info and date_info["date-parts"]:
+                year = str(date_info["date-parts"][0][0])
+
+            container = data.get("container-title", [])
+            source_val = container[0] if container else data.get("publisher", "")
+
+            if title and not is_invalid_title(title):
+                return {
+                    "author": auth_str if not is_invalid_author(auth_str) else "",
+                    "year": year,
+                    "title": title,
+                    "source": source_val,
+                    "url": clean_url
+                }
+    except Exception:
+        pass
+
+    # Stufe 3: DataCite REST-API (https://api.datacite.org/dois/{doi})
+    try:
+        req_url = f"https://api.datacite.org/dois/{doi_clean}"
+        req = urllib.request.Request(req_url, headers={
+            "User-Agent": "Antigravity/1.0 (mailto:jonathanklatchko@gmail.com)"
+        })
+        with urllib.request.urlopen(req, timeout=5.0) as resp:
+            data = json.loads(resp.read().decode("utf-8")).get("data", {}).get("attributes", {})
+            titles = data.get("titles", [])
+            title = titles[0].get("title", "") if titles else ""
+            creators = data.get("creators", [])
+            auth_list = []
+            for c in creators[:20]:
+                fam = c.get("familyName", "")
+                giv = c.get("givenName", "")
+                if fam:
+                    init = f"{giv[0]}." if giv else ""
+                    auth_list.append(f"{fam}, {init}".strip())
+                elif c.get("name"):
+                    auth_list.append(c["name"].strip())
+            if len(creators) > 20:
+                last = creators[-1]
+                last_fam = last.get('familyName', '')
+                last_init = f"{last.get('givenName', '')[0]}." if last.get('givenName') else ""
+                auth_str = ", ".join(auth_list[:19]) + ", ... " + f"{last_fam}, {last_init}".strip()
+            elif len(auth_list) > 1:
+                auth_str = ", ".join(auth_list[:-1]) + " & " + auth_list[-1]
+            elif auth_list:
+                auth_str = auth_list[0]
+            else:
+                auth_str = ""
+
+            year = str(data.get("publicationYear") or "")
+            source_val = data.get("publisher", "")
+
+            if title and not is_invalid_title(title):
+                return {
+                    "author": auth_str if not is_invalid_author(auth_str) else "",
+                    "year": year,
+                    "title": title,
+                    "source": source_val,
+                    "url": clean_url
+                }
+    except Exception:
+        pass
+
+    return None
+
 def investigate_link(url: str) -> Optional[Dict[str, str]]:
     """Untersucht einen vorliegenden Link (DOI oder URL) und extrahiert normierte Metadaten für das APA-Format."""
     clean_url = clean_url_string(url)
     if not clean_url:
         return None
 
-    # 1. DOI-Erkennung: Content Negotiation via CSL-JSON (universell für Crossref, DataCite, mEDRA etc.)
+    cache = load_citation_cache()
+    if clean_url in cache:
+        cached = cache[clean_url]
+        if cached.get("title") and not is_invalid_title(cached.get("title")) and not is_invalid_author(cached.get("author")):
+            return cached
+
+    # 1. DOI-Erkennung: High-Resilience Kaskade (CSL-JSON -> Crossref -> DataCite)
     doi_match = re.search(r'10\.\d{4,9}/[-._;()/:A-Za-z0-9]+', clean_url)
-    if 'doi.org' in clean_url or doi_match:
-        doi_str = doi_match.group(0) if doi_match else clean_url.split('doi.org/')[-1]
-        try:
-            req_url = f"https://doi.org/{doi_str}"
-            req = urllib.request.Request(req_url, headers={
-                "Accept": "application/vnd.citationstyles.csl+json",
-                "User-Agent": "AntigravityAPA/1.0 (mailto:jonathanklatchko@gmail.com)"
-            })
-            with urllib.request.urlopen(req, timeout=4.0) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                title = data.get("title", "")
-                if data.get("subtitle"):
-                    title = f"{title}: {data['subtitle']}"
-                authors = data.get("author", [])
-                auth_list = []
-                for a in authors[:20]:
-                    fam = a.get("family", "")
-                    giv = a.get("given", "")
-                    if fam:
-                        init = f"{giv[0]}." if giv else ""
-                        auth_list.append(f"{fam}, {init}".strip())
-                    elif a.get("name") or a.get("literal"):
-                        lit = (a.get("name") or a.get("literal")).strip()
-                        is_org = any(w in lit.lower() for w in ["institut", "institute", "organization", "organisation", "gmbh", "association", "office", "rki", "who", "bundesamt", "center", "centre"])
-                        if not is_org and (" " in lit or "," in lit):
-                            apa_lit = parse_author_name_to_apa(lit)
-                            if apa_lit:
-                                auth_list.append(apa_lit)
-
-                if len(authors) > 20:
-                    last = authors[-1]
-                    last_fam = last.get('family', '')
-                    last_init = f"{last.get('given', '')[0]}." if last.get('given') else ""
-                    auth_str = ", ".join(auth_list[:19]) + ", ... " + f"{last_fam}, {last_init}".strip()
-                elif len(auth_list) > 1:
-                    auth_str = ", ".join(auth_list[:-1]) + " & " + auth_list[-1]
-                elif auth_list:
-                    auth_str = auth_list[0]
-                else:
-                    auth_str = ""
-
-                year = ""
-                if "issued" in data and "date-parts" in data["issued"]:
-                    year = str(data["issued"]["date-parts"][0][0])
-
-                publisher = data.get("publisher", "")
-                container = data.get("container-title", "")
-                source_val = container if container else publisher
-                landing_url = data.get("URL") or req_url
-
-                # FALLS CSL-JSON keinen eindeutigen Personen-Autor liefern konnte:
-                # Untersuche die Zielseite (Landing-Page) der DOI auf Autoren-Metatags (Dublin Core, Highwire Press, etc.)!
-                if not auth_str:
-                    try:
-                        req_page = urllib.request.Request(landing_url, headers={
-                            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
-                        })
-                        with urllib.request.urlopen(req_page, timeout=4.0) as resp_page:
-                            html_page = resp_page.read(300000).decode("utf-8", errors="replace")
-                            page_authors = extract_authors_from_html(html_page)
-                            if page_authors:
-                                auth_str = format_authors_apa(page_authors)
-                            if not year:
-                                m_yr = re.search(r'\b(20\d{2})\b', html_page)
-                                if m_yr:
-                                    year = m_yr.group(1)
-                    except Exception:
-                        pass
-
-                return {
-                    "author": auth_str,
-                    "year": year,
-                    "title": title,
-                    "source": source_val,
-                    "url": clean_url
-                }
-        except Exception:
-            pass
+    is_doi = bool('doi.org' in clean_url or doi_match)
+    if is_doi:
+        doi_str = doi_match.group(0) if doi_match else clean_url.split('doi.org/')[-1].strip('/')
+        doi_meta = fetch_doi_metadata_resilient(doi_str, clean_url)
+        if doi_meta:
+            cache[clean_url] = doi_meta
+            save_citation_cache(cache)
+            return doi_meta
+        # Für DOIs niemals den generischen Website-HTML-Fallback mit "Doi.org" als Autor verwenden!
+        return None
 
     # 2. Reguläre Website-Untersuchung (HTML Meta-Tags, OpenGraph, Dublin Core, JSON-LD)
     parsed = urllib.parse.urlparse(clean_url)
@@ -528,6 +673,9 @@ def investigate_link(url: str) -> Optional[Dict[str, str]]:
     }
 
     site_name = inst_map.get(domain, domain.capitalize())
+    if domain in ("doi.org", "dx.doi.org", "crossref.org"):
+        site_name = ""
+
     title = ""
     author = ""
     year = ""
@@ -561,12 +709,12 @@ def investigate_link(url: str) -> Optional[Dict[str, str]]:
                     if auth_m:
                         author = format_authors_apa([auth_m.group(1).strip()])
 
-                # 1. JSON-LD / Schema.org (datePublished, dateCreated, dateModified)
+                # 1. JSON-LD / Schema.org
                 m_json_date = re.search(r'["\'](?:datePublished|dateCreated|dateModified|uploadDate)["\']\s*:\s*["\'](\d{4})', html, re.I)
                 if m_json_date:
                     year = m_json_date.group(1)
 
-                # 2. Erweiterte Meta-Tags (OpenGraph, DublinCore, News)
+                # 2. Erweiterte Meta-Tags
                 if not year:
                     meta_date_patterns = [
                         r'<meta[^>]+(?:name|property|itemprop)=[\'"](?:article:published_time|og:published_time|date|pubdate|publishdate|dc\.date|dc\.date\.issued|dc\.date\.created|sailthru\.date|parsely-pub-date|article:modified_time|og:updated_time)[\'"][^>]+content=[\'"](\d{4})',
@@ -588,7 +736,7 @@ def investigate_link(url: str) -> Optional[Dict[str, str]]:
                         if m_time_txt:
                             year = m_time_txt.group(1)
 
-                # 4. Textdaten im HTML-Körper (Deutsch und Englisch)
+                # 4. Textdaten im HTML-Körper
                 if not year:
                     m_de_date = re.search(
                         r'\b\d{1,2}\.?\s*(?:Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember|Jan|Feb|Mär|Apr|Mai|Jun|Jul|Aug|Sep|Okt|Nov|Dez)\.?\s*(20\d{2})\b',
@@ -621,10 +769,12 @@ def investigate_link(url: str) -> Optional[Dict[str, str]]:
             if not year:
                 year = m_slug_date.group(1)
             last_seg = m_slug_date.group(4)
-        title = last_seg.replace("-", " ").replace("_", " ").capitalize()
+        if not is_doi:
+            title = last_seg.replace("-", " ").replace("_", " ").capitalize()
 
-    title = re.sub(r"\s*[\-|–—|]\s*" + re.escape(site_name) + r".*$", "", title, flags=re.I).strip()
-    if not author:
+    if site_name:
+        title = re.sub(r"\s*[\-|–—|]\s*" + re.escape(site_name) + r".*$", "", title, flags=re.I).strip()
+    if not author and site_name and not is_invalid_author(site_name):
         author = site_name
 
     if not year:
@@ -632,13 +782,22 @@ def investigate_link(url: str) -> Optional[Dict[str, str]]:
         if url_yr:
             year = url_yr.group(1)
 
-    return {
+    if is_invalid_author(author):
+        author = ""
+    if is_invalid_title(title):
+        title = ""
+
+    res_meta = {
         "author": author,
         "year": year,
         "title": title,
-        "source": site_name if author.lower() != site_name.lower() else "",
+        "source": site_name if (author and site_name and author.lower() != site_name.lower()) else "",
         "url": clean_url
     }
+    if res_meta.get("title") and not is_invalid_title(res_meta["title"]):
+        cache[clean_url] = res_meta
+        save_citation_cache(cache)
+    return res_meta
 
 def find_date_in_context(raw_citation: str, clean_url: str, link_meta: dict, context_text: str) -> Optional[str]:
     """Findet deterministisch ein plausibles Publikations- oder Referenzdatum im Dokumententext zur zitierten Quelle."""
@@ -822,17 +981,22 @@ def format_citation_to_apa_7(raw_citation: str, context_text: str = "") -> Dict[
         if len(ctx_tokens.intersection(en_words)) >= 4:
             is_en_doc = True
 
+    if is_invalid_author(author):
+        author = ""
+    if is_invalid_title(title):
+        title = ""
+
     # Falls immer noch kein Autor vorliegt (oder "O. A." / "N. A."): Im Dokumentenkontext suchen!
-    if not author or author.lower() in ("o. a.", "ohne autor", "n. a.", "untitled"):
+    if not author or is_invalid_author(author):
         ctx_author = find_author_in_context(clean_raw, clean_url, link_meta, context_text)
-        if ctx_author:
+        if ctx_author and not is_invalid_author(ctx_author):
             author = ctx_author
 
-    if not author:
+    if not author or is_invalid_author(author):
         author = "N. A." if is_en_doc else "O. A."
     if not date_str:
         date_str = "n.d." if is_en_doc else "o. D."
-    if not title:
+    if not title or is_invalid_title(title):
         title = "Untitled" if is_en_doc else "Ohne Titel"
 
     author_part = escape_typst_line(author)
@@ -1659,7 +1823,8 @@ def parse_rtf_to_typst(
                 t_inner = t_content
             if fmt == "atk1":
                 t_inner = f"#upper[{t_inner}]"
-            typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    #text(font: {title_font_spec}, size: {title_size}, weight: \"bold\", fill: rgb(\"#000000\"))[{t_inner}]\n  ]\n]\n#v(3mm)")
+            v_title_gap = "1.8mm" if fmt == "atk1" else "1.4mm"
+            typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    #text(font: {title_font_spec}, size: {title_size}, weight: \"bold\", fill: rgb(\"#000000\"))[{t_inner}]\n  ]\n]\n#v({v_title_gap})")
             continue
 
         if idx == title_idx + 1 and (is_author_name(p_plain_clean) or p.get('align') == 'center' or p_plain_clean == extracted_author or bool(re.match(r"^(?:autor|author|von|by):\s*", p_plain_clean, re.I))):
@@ -2453,8 +2618,8 @@ def convert_txt_to_pdf(
 
     if fmt == "atk1":
         display_title = doc_title.upper()
-        author_part = f'\n        #v(3mm)\n        #block[#text(style: "italic", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(doc_author)}]]' if doc_author else ""
-        date_part = f'\n        #v(1.5mm)\n        #block[#text(size: 8pt, fill: rgb("#000000"))[{escape_typst_line(doc_date)}]]' if doc_date else ""
+        author_part = f'\n        #v(1.8mm)\n        #block[#text(style: "italic", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(doc_author)}]]' if doc_author else ""
+        date_part = f'\n        #v(1.2mm)\n        #block[#text(size: 8pt, fill: rgb("#000000"))[{escape_typst_line(doc_date)}]]' if doc_date else ""
         header_content = f"""#align(center)[
       #block[#text(font: {title_font_spec}, size: {title_size}, weight: "bold", fill: rgb("#000000"))[{escape_typst_line(display_title)}]]{author_part}{date_part}
     ]"""
@@ -2478,7 +2643,7 @@ def convert_txt_to_pdf(
     else:
         author_block = ""
         if doc_author:
-            author_block = f'\n        #v(2.2mm)\n        #block[#text(style: "italic", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(doc_author)}]]'
+            author_block = f'\n        #v(1.4mm)\n        #block[#text(style: "italic", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(doc_author)}]]'
 
         if doc_date:
             header_content = f"""#grid(
