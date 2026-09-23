@@ -69,6 +69,35 @@ else
     echo -e "${GREEN}==>${NC} PT Serif ist bereits vorhanden."
 fi
 
+# 3b. Prüfe und installiere Schriftart Roboto
+echo -e "${BLUE}==>${NC} Prüfe Schriftart Roboto..."
+ROBOTO_INSTALLED=false
+
+if command -v typst &>/dev/null && typst fonts 2>/dev/null | grep -qi "Roboto"; then
+    ROBOTO_INSTALLED=true
+fi
+
+if [ -f "$FONTS_DIR/Roboto-Regular.ttf" ] || [ -f "$FONTS_DIR/Roboto[wdth,wght].ttf" ]; then
+    ROBOTO_INSTALLED=true
+fi
+
+if [ "$ROBOTO_INSTALLED" = false ]; then
+    echo -e "${BLUE}==>${NC} Installiere Roboto nach $FONTS_DIR..."
+    if [[ "$OSTYPE" == "darwin"* ]] && command -v brew &>/dev/null; then
+        brew install --cask font-roboto 2>/dev/null || true
+    fi
+    if ! (command -v typst &>/dev/null && typst fonts 2>/dev/null | grep -qi "Roboto"); then
+        curl -fsSL "https://raw.githubusercontent.com/google/fonts/main/ofl/roboto/Roboto%5Bwdth%2Cwght%5D.ttf" -o "$FONTS_DIR/Roboto[wdth,wght].ttf" 2>/dev/null || true
+        curl -fsSL "https://raw.githubusercontent.com/google/fonts/main/ofl/roboto/Roboto-Italic%5Bwdth%2Cwght%5D.ttf" -o "$FONTS_DIR/Roboto-Italic[wdth,wght].ttf" 2>/dev/null || true
+    fi
+    if command -v fc-cache &>/dev/null; then
+        fc-cache -f "$FONTS_DIR" &>/dev/null || true
+    fi
+    echo -e "${GREEN}==>${NC} Roboto wurde erfolgreich eingerichtet."
+else
+    echo -e "${GREEN}==>${NC} Roboto ist bereits vorhanden."
+fi
+
 # 4. Prüfe und installiere DeepL Python-Bibliothek
 echo -e "${BLUE}==>${NC} Prüfe DeepL-Bibliothek..."
 if ! python3 -c "import deepl" &>/dev/null; then
