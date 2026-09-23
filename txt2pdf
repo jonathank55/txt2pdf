@@ -1226,17 +1226,15 @@ def generate_bibliography_typst(
     body = "\n".join(entries_typst)
 
     return f"""
-#pagebreak()
-#set page(columns: 1, header: none, margin: (x: 16mm, top: 18mm, bottom: 18mm))
-#show link: set text(fill: rgb("#0b57d0"))
-#align(left)[
-  #v(1.5mm)
+#v(1.8em)
+#line(length: 100%, stroke: 0.5pt + rgb("#000000"))
+#v(1.2em)
+#align(center)[
   #text(size: {title_size}, weight: "bold", fill: rgb("#000000"))[{escape_typst_line(bib_title)}]
-  #v(1.2mm)
-  #line(length: 100%, stroke: 0.5pt + rgb("#000000"))
-  #v(3mm)
 ]
+#v(1.2em)
 
+#show link: set text(fill: rgb("#0b57d0"))
 #set text(font: {font_spec}, size: {font_size})
 #set par(
   hanging-indent: 12.7mm,
@@ -2574,7 +2572,7 @@ def convert_txt_to_pdf(
     open_preview: bool = False,
     columns: int = None,
     font_family: str = None,
-    format_preset: str = "atk1",
+    format_preset: str = "atk2",
     use_initial: bool = None,
     target_lang: str = None
 ) -> bool:
@@ -2593,8 +2591,8 @@ def convert_txt_to_pdf(
 
     os.makedirs(os.path.dirname(abs_output), exist_ok=True)
 
-    # Format-Profil auflösen (-f atk1 | atk2 | atk | br2 | br1 | apa; Standard: atk1)
-    fmt_raw = (format_preset or "atk1").lower().strip()
+    # Format-Profil auflösen (-f atk1 | atk2 | atk | br2 | br1 | apa; Standard: atk2)
+    fmt_raw = (format_preset or "atk2").lower().strip()
     if fmt_raw in ("atk1", "artikel1"):
         fmt = "atk1"
     elif fmt_raw in ("atk2", "artikel2"):
@@ -2806,6 +2804,7 @@ def convert_txt_to_pdf(
     final_bib_title = bib_heading_title if bib_heading_title else default_bib_title
 
     raw_doc_context = raw_content if not is_rtf else " ".join(plain_paragraphs if 'plain_paragraphs' in locals() else [])
+    bib_title_size = f"{base_pt + 4.0:g}pt"
 
     bibliography_typst = generate_bibliography_typst(
         urls=urls,
@@ -2813,7 +2812,7 @@ def convert_txt_to_pdf(
         bib_title=final_bib_title,
         font_spec=body_font_spec,
         font_size=final_font_size,
-        title_size=title_size,
+        title_size=bib_title_size,
         context_text=raw_doc_context
     )
 
@@ -2976,13 +2975,13 @@ def main():
     RESET = "\033[0m"
 
     fmt_help = (
-        f"Format: {BLUE}atk1{RESET} (Artikel, 3 Spalten, Big Caslon, ohne Linie; Standard), "
-        f"{BLUE}atk2{RESET} (Artikel, 3 Spalten, PT Serif, mit Linie, Titel: Didot 36pt zentriert), "
+        f"Format: {BLUE}atk2{RESET} (Artikel, 3 Spalten, PT Serif, mit Linie, Titel: Didot 36pt zentriert; Standard), "
+        f"{BLUE}atk1{RESET} (Artikel, 3 Spalten, Big Caslon, ohne Linie), "
         f"{BLUE}br2{RESET} (Bericht, 2 Spalten, PT Serif), "
         f"{BLUE}br1{RESET} (Bericht, 1 Spalte, PT Serif), "
         f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter)"
     )
-    size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 9pt bei atk1, 10pt bei atk2, 12pt bei br2/br1; entfällt bei apa)"
+    size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 10pt bei atk2, 9pt bei atk1, 12pt bei br2/br1; entfällt bei apa)"
     font_help = f"Schriftart ({BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, {BLUE}Didot{RESET}, {BLUE}Cochin{RESET}, {BLUE}Big Caslon{RESET}, {BLUE}Baskerville{RESET}, {BLUE}Roboto{RESET}, {BLUE}Monaco{RESET})"
 
     parser = argparse.ArgumentParser(
@@ -2992,7 +2991,7 @@ def main():
         add_help=False
     )
     parser.add_argument("-h", action="help", help="Hilfe anzeigen")
-    parser.add_argument("-f", dest="format_preset", metavar="FORMAT", default="atk1", help=fmt_help)
+    parser.add_argument("-f", dest="format_preset", metavar="FORMAT", default="atk2", help=fmt_help)
     parser.add_argument("-z", dest="font_family", metavar="SCHRIFT", default=None, help=font_help)
     parser.add_argument("-s", dest="size", metavar="GRÖßE", default=None, help=size_help)
     img_help = f"Abbildung einbetten ({BLUE}##Pfad/zur/Datei{RESET} in .txt/.md an gewünschter Stelle; .png/.jpg/.jpeg/.webp/.pdf)"
@@ -3023,7 +3022,7 @@ def main():
     final_date = args.date
     final_target_lang = args.target_lang
     all_images = args.images or []
-    fmt = (args.format_preset or "atk1").lower().strip()
+    fmt = (args.format_preset or "atk2").lower().strip()
     final_font_size = args.size if fmt != "apa" else None
     final_font = args.font_family
 
