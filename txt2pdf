@@ -1270,7 +1270,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                 current_indent = False
             continue
 
-        is_indented_line = bool(line.startswith("\t") or line.startswith("  ") or (len(line) > len(line.lstrip()) and line.strip()))
+        is_indented_line = bool(line.startswith("\t") or line.startswith("  ") or (len(line) > len(line.lstrip()) and bool(line.strip())))
 
         if bib_header_exact_regex.match(s):
             if current_lines:
@@ -1306,6 +1306,55 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                     "has_indent": is_indented_line
                 })
             continue
+
+        is_quote = (
+            len(s) <= 280 and (
+                (s.startswith("»") and s.endswith("«")) or
+                (s.startswith("„") and s.endswith("“")) or
+                (s.startswith('"') and s.endswith('"')) or
+                (s.startswith("“") and s.endswith("”"))
+            )
+        )
+        if is_quote:
+            if current_lines:
+                paragraphs.append({
+                    "text": "\n".join(current_lines),
+                    "has_indent": current_indent
+                })
+                current_lines = []
+                current_indent = False
+            paragraphs.append({
+                "text": s,
+                "has_indent": False
+            })
+            continue
+
+        is_md_block = bool(
+            re.match(r"^#{1,4}\s+", s) or
+            s.startswith(">") or
+            re.match(r"^[-*•]\s+", s)
+        )
+        if is_md_block:
+            if current_lines:
+                paragraphs.append({
+                    "text": "\n".join(current_lines),
+                    "has_indent": current_indent
+                })
+                current_lines = []
+                current_indent = False
+            paragraphs.append({
+                "text": s,
+                "has_indent": False
+            })
+            continue
+
+        if is_indented_line and current_lines:
+            paragraphs.append({
+                "text": "\n".join(current_lines),
+                "has_indent": current_indent
+            })
+            current_lines = []
+            current_indent = True
 
         if not current_lines:
             current_indent = is_indented_line
