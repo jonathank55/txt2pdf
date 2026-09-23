@@ -38,7 +38,7 @@ txt2pdf DATEI [OPTIONEN]
 
 ### Optionen
 
-- `-f FORMAT`  : Format-Vorgabe (`br2` für 2-Spalten-Bericht mit Optima [Standard], `br1` für 1-Spalten-Bericht mit PT Serif, `atk1` für 3-Spalten-Artikel mit Big Caslon ohne Trennlinie und Titel in Didot, `atk2` für 3-Spalten-Artikel mit PT Serif und Trennlinie, `apa` für 7. Edition APA-Bericht).
+- `-f FORMAT`  : Format-Vorgabe (`br2` für 2-Spalten-Bericht mit Optima [Standard], `br1` für 1-Spalten-Bericht mit PT Serif, `atk1` für 3-Spalten-Artikel mit Big Caslon ohne Trennlinie, `atk2` für 3-Spalten-Artikel mit PT Serif und Trennlinie, `apa` für 7. Edition APA-Bericht).
 - `-z SCHRIFT` : Schriftart wählen (`Times New Roman`, `PT Serif`, `Optima`, `Didot`, `Cochin`, `Big Caslon`, `Baskerville`, `Roboto`, `Monaco`).
 - `-s GRÖßE`   : Fließtext-Größe (`6pt` bis `12pt`).
 - `-i BILD`    : Abbildung einbinden (Syntax `##Pfad/zur/Datei` direkt im Textdokument verwenden).

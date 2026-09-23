@@ -1108,8 +1108,6 @@ def resolve_font_spec(font_arg: str = None, fmt: str = "br2") -> Tuple[str, str]
 
 def resolve_title_font_spec(fmt: str, body_font_spec: str) -> str:
     """Löst die typografische Schriftartenspezifikation für die Hauptüberschrift (Titel) auf."""
-    if fmt == "atk1":
-        return '("Didot", "GFS Didot", "Theano Didot", "Bodoni 72", "PT Serif", "Times New Roman")'
     return body_font_spec
 
 def resolve_heading_font_spec(fmt: str, body_font_spec: str) -> str:
@@ -2823,7 +2821,7 @@ def convert_txt_to_pdf(
         header_content = f"""#align(center)[
       #block[#text(font: {title_font_spec}, size: {title_size}, weight: "bold", fill: rgb("#000000"))[#strong[{escape_typst_line(doc_title)}]]]{author_part}{date_part}
     ]"""
-        top_header_box = f"""// Vollbreite-Titelbox ohne Trennlinie (atk1: Didot, 10pt größer als Text)
+        top_header_box = f"""// Vollbreite-Titelbox ohne Trennlinie (atk1: 10pt größer als Text)
 #place(top, scope: "parent", float: true)[
   #block(width: 100%, inset: (bottom: 1.5mm))[
     {header_content}
@@ -2961,7 +2959,7 @@ def main():
     fmt_help = (
         f"Format: {BLUE}br2{RESET} (Bericht, 2 Spalten, Optima; Standard), "
         f"{BLUE}br1{RESET} (Bericht, 1 Spalte, PT Serif), "
-        f"{BLUE}atk1{RESET} (Artikel, 3 Spalten, Big Caslon, ohne Linie, Titel: Didot), "
+        f"{BLUE}atk1{RESET} (Artikel, 3 Spalten, Big Caslon, ohne Linie), "
         f"{BLUE}atk2{RESET} (Artikel, 3 Spalten, PT Serif, mit Linie), "
         f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter)"
     )
