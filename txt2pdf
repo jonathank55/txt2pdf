@@ -2578,6 +2578,10 @@ def extract_metadata_and_body(raw_text: str, default_author: str = None, default
 
         # 3. Expliziter Autor-Präfix
         m_auth = re.match(r"^(?:Autor|Author|Von|By|Verfasser|Written\s+by):\s*(.+)$", line_s, re.IGNORECASE)
+        if not m_auth:
+            m_auth_v = re.match(r"^(?:Autor|Author|Verfasser|Written\s+by|Von|By)\s+([A-ZÄÖÜ][A-Za-zÄÖÜäöüß]+(?:\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüß]+)+)$", line_s)
+            if m_auth_v and is_author_name(m_auth_v.group(1)):
+                m_auth = m_auth_v
         if m_auth:
             if not extracted_author:
                 extracted_author = m_auth.group(1).strip()
@@ -3273,8 +3277,10 @@ def convert_txt_to_pdf(
         author_block = ""
         if doc_author:
             clean_a = doc_author.strip()
-            if not any(clean_a.lower().startswith(p.lower()) for p in ("von ", "by ", "por ")):
-                clean_a = f"{author_prefix.lower()}{clean_a}"
+            # Nur beim Format "atk" das "VON" hinzufügen (vorm Namen des Autors). Bei den anderen Formaten nicht.
+            m_von = re.match(r"^(?:von|by|por)\s+(.+)$", clean_a, re.IGNORECASE)
+            if m_von and is_author_name(m_von.group(1).strip()):
+                clean_a = m_von.group(1).strip()
             author_block = f'\n        #v(1.4mm)\n        #block[#text(style: "italic", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(clean_a)}]]'
 
         if doc_date:
