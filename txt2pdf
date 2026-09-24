@@ -1237,7 +1237,7 @@ def generate_bibliography_typst(
 #v(1.2em)
 
 #show link: set text(fill: rgb("#0b57d0"))
-#set text(font: {font_spec}, size: {font_size}, costs: (hyphenation: 500%))
+#set text(font: {font_spec}, size: {font_size}, costs: (hyphenation: 2000%))
 #set par(
   hanging-indent: {hanging_indent},
   leading: {leading},
@@ -2983,7 +2983,7 @@ def convert_txt_to_pdf(
   size: {final_font_size},
   lang: "{effective_lang}",
   hyphenate: true,
-  costs: (hyphenation: 500%)
+  costs: (hyphenation: 2000%)
 )
 
 #set par(
