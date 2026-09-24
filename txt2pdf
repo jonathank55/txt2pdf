@@ -2822,9 +2822,10 @@ def convert_txt_to_pdf(
     columns_directive = f"#set columns(gutter: {final_gutter})\n" if final_columns > 1 else ""
 
     if fmt == "atk":
-        author_font_spec = FONT_DEFINITIONS["didot"]["spec"]
-        author_part = f'\n        #v(6.5mm)\n        #block[#text(font: {author_font_spec}, style: "normal", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(doc_author)}]]' if doc_author else ""
-        date_part = f'\n        #v(1.0mm)\n        #block[#text(size: 8pt, fill: rgb("#000000"))[{escape_typst_line(doc_date)}]]' if doc_date else ""
+        author_font_spec = '("Calibre", "Helvetica Neue", "Helvetica", "Arial", "Roboto", "sans-serif")'
+        author_text = doc_author.upper() if doc_author else ""
+        author_part = f'\n        #v(5.5mm)\n        #block[#text(font: {author_font_spec}, size: 8.5pt, weight: "regular", tracking: 0.08em, fill: rgb("#000000"))[{escape_typst_line(author_text)}]]' if doc_author else ""
+        date_part = f'\n        #v(1.0mm)\n        #block[#text(font: {author_font_spec}, size: 7.5pt, fill: rgb("#000000"))[{escape_typst_line(doc_date)}]]' if doc_date else ""
         top_header_box = f"""// Vollbreite-Titelbox mit Trennlinie (atk: Didot maximal dynamisch, einzeilig, zentriert)
 #place(top, scope: "parent", float: true)[
   #block(width: 100%, inset: (bottom: 2.5mm))[
