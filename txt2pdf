@@ -3426,15 +3426,49 @@ def convert_txt_to_pdf(
 convert_txt_to_3col_pdf = convert_txt_to_pdf
 
 def normalize_cli_args(raw_args):
-    """Normalisiert CLI-Argumente, sodass -p auch als stand-alone Flag ohne Wert übergeben werden kann."""
+    """Normalisiert CLI-Argumente, sodass Flags mit mehrteiligen Werten (z. B. -z PT Serif) oder stand-alone Flags (-p) nahtlos verarbeitet werden."""
+    # Liste aller bekannten Options-Flags
+    single_val_flags = {"-f", "-z", "-s", "-r", "-i", "-a", "-t", "-d", "-l", "-o"}
+    bool_flags = {"-h", "--help", "--install-fonts"}
+
     norm = []
     i = 0
     while i < len(raw_args):
         a = raw_args[i]
-        norm.append(a)
         if a == "-p":
+            norm.append(a)
             if i + 1 >= len(raw_args) or raw_args[i + 1].startswith("-"):
                 norm.append("true")
+            i += 1
+            continue
+
+        if a in single_val_flags:
+            norm.append(a)
+            val_tokens = []
+            i += 1
+            while i < len(raw_args):
+                next_tok = raw_args[i]
+                # Stoppe, wenn das nächste Argument ein neues Options-Flag ist
+                if next_tok.startswith("-") and (next_tok in single_val_flags or next_tok in bool_flags or next_tok == "-p"):
+                    break
+                # Wenn es der letzte Token ist und wie eine existierende Datei oder ein Textpfad aussieht (und wir schon Werte gesammelt haben), prüfe ob es die Eingabedatei ist
+                if val_tokens and (os.path.exists(next_tok) or next_tok.lower().endswith((".txt", ".md", ".rtf", ".rtfd"))):
+                    break
+                val_tokens.append(next_tok)
+                i += 1
+                # Wenn wir für ein kurzes Flag (wie -f, -s, -r, -l) bereits einen Token haben, der kein zusammengesetzter Name ist:
+                if a in ("-f", "-s", "-r", "-l"):
+                    break
+                # Bei -z: Wenn die gesammelten Wörter eine bekannte Schriftart ergeben (z. B. "PT Serif", "Times New Roman", "Big Caslon", "EB Garamond")
+                if a == "-z":
+                    joined_f = " ".join(val_tokens).lower()
+                    if joined_f in ("times new roman", "pt serif", "big caslon", "eb garamond", "libre caslon", "libre baskerville"):
+                        break
+            if val_tokens:
+                norm.append(" ".join(val_tokens))
+            continue
+
+        norm.append(a)
         i += 1
     return norm
 
