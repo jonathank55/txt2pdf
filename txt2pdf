@@ -229,7 +229,12 @@ def is_author_name(candidate: str) -> bool:
         "who", "whom", "whose", "what", "which", "where", "when", "why", "how",
         "artikel", "aufsatz", "bericht", "essay", "notiz", "notizen", "entwurf", "text", "dokument", "paper", "report", "draft", "article",
         "kolumne", "kommentar", "lehrbuch", "manuskript", "übersicht", "gliederung",
-        "schwitzt", "herrscht", "denkt", "schreibt", "sagt", "geht", "kommt", "steht", "liegt", "bleibt", "sieht", "zeigt", "lebt", "stirbt", "zahlt", "kostet"
+        "schwitzt", "herrscht", "denkt", "schreibt", "sagt", "geht", "kommt", "steht", "liegt", "bleibt", "sieht", "zeigt", "lebt", "stirbt", "zahlt", "kostet",
+        "fire", "cal", "lab", "notes", "discussion", "urban", "planners", "planner", "advocacy", "group", "groups", "center", "centre", "team", "task", "force",
+        "committee", "commission", "department", "dept", "agency", "board", "council", "union", "association", "office", "station", "society", "brigade", "division",
+        "bureau", "service", "services", "police", "hospital", "institute", "institution", "foundation", "university", "college", "school", "community", "communities",
+        "government", "state", "county", "city", "feuer", "wehr", "feuerwehr", "gruppe", "notizen", "labor", "diskussion", "planer", "zentrum", "amt", "abteilung",
+        "behörde", "polizei", "krankenhaus", "verband", "verein", "gesellschaft", "institut", "hochschule", "universität", "stiftung", "gemeinde", "regierung", "staat", "stadt"
     }
 
     words = re.findall(r"[A-Za-zÄÖÜäöüß]+(?:-[A-Za-zÄÖÜäöüß]+)?|\b[A-ZÄÖÜ]\.", s_clean)
@@ -238,6 +243,8 @@ def is_author_name(candidate: str) -> bool:
 
     for w in words:
         if w.lower() in stopwords:
+            return False
+        if any(w.lower().endswith(suf) for suf in ("bericht", "analyse", "studie", "aufsatz", "entwurf", "gruppe", "notes", "fire")):
             return False
         if not (w[0].isupper() or w.lower() in ("von", "van", "de", "der", "zu")):
             return False
@@ -2650,12 +2657,13 @@ def extract_metadata_and_body(raw_text: str, default_author: str = None, default
                         curr_idx += 1
                         continue
 
-        # 6. Autor ohne Präfix (z. B. "Jonathan Klatchko")
-        if is_author_name(line_s):
-            if not extracted_author:
-                extracted_author = line_s
-                curr_idx += 1
-                continue
+        # 6. Autor ohne Präfix (z. B. "Jonathan Klatchko") - nur wenn nicht bereits ein Autor vorgegeben ist
+        if not default_author:
+            if is_author_name(line_s):
+                if not extracted_author:
+                    extracted_author = line_s
+                    curr_idx += 1
+                    continue
 
         # Sobald eine Zeile weder Titel, Autor noch Datum ist, beginnt der eigentliche Fließtext
         break
@@ -2712,6 +2720,8 @@ def convert_txt_to_apa_standalone(
 
     if ext_title and not is_matching_title(ext_title, doc_title):
         body_lines = [ext_title, ""] + list(body_lines)
+    if ext_author and (not doc_author or ext_author.lower().strip() != doc_author.lower().strip()):
+        body_lines = [ext_author, ""] + list(body_lines)
 
     paragraphs = []
     cur = []
@@ -3022,7 +3032,7 @@ def convert_txt_to_pdf(
         final_initial = use_initial if use_initial is not None else False
         final_gutter = gutter if gutter is not None else "0mm"
         final_font_size = font_size if font_size is not None else "12pt"
-        default_leading = "1.15em"
+        default_leading = "0.35em"
     else:  # br2 (Standard: 2 Spalten, 12pt Textgröße, Optima)
         final_columns = columns if columns is not None else 2
         final_initial = use_initial if use_initial is not None else False
@@ -3107,6 +3117,8 @@ def convert_txt_to_pdf(
         # darf er keinesfalls verloren gehen, sondern muss als Inhaltszeile (Überschrift) im Textkörper verbleiben!
         if extracted_title and not is_matching_title(extracted_title, doc_title):
             body_lines = [extracted_title, ""] + list(body_lines)
+        if extracted_author and (not doc_author or extracted_author.lower().strip() != doc_author.lower().strip()):
+            body_lines = [extracted_author, ""] + list(body_lines)
 
         if target_lang:
             trans_tgt = target_lang.lower().strip()
