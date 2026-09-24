@@ -133,6 +133,31 @@ def apply_initial_to_typst_element(content: str) -> str:
         return s
     return f"#dropcap(\n  height: 3,\n  gap: 2pt,\n  justify: true,\n)[{s}]"
 
+def is_heading_sentence(text: str) -> bool:
+    """Erkennt deterministisch, ob ein Absatz aus einem einzelnen Satz oder einer kurzen Phrase (mit oder ohne Punkt) als Überschrift besteht."""
+    s = text.strip()
+    if not s or len(s) > 350:
+        return False
+    if is_apa_citation(s):
+        return False
+    if s.startswith(("http://", "https://", "www.", "doi:")) or re.match(r"^https?://", s):
+        return False
+    if any(s.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "weil ", "dass ", "wenn ", "obwohl ", "währenddessen "]):
+        return False
+    # Wenn kein Satzendepunkt vorliegt
+    if not s.endswith((".", "!", "?", "...", ";", ":")):
+        return True
+    # Falls Punkt am Ende vorliegt: prüfen, ob es genau 1 Satz ist (keine internen Satzgrenzen)
+    clean = re.sub(
+        r"\b(?:z\. B\.|d\. h\.|u\. a\.|u\. ä\.|bzw\.|ca\.|evtl\.|inkl\.|Dr\.|Prof\.|Hr\.|Fr\.|Nr\.|Abs\.|Art\.|Vgl\.|vgl\.|S\.|ff\.|etc\.|e\.g\.|i\.e\.)",
+        "ABBR",
+        s,
+        flags=re.IGNORECASE
+    )
+    inner = clean[:-1].strip()
+    internal_boundaries = re.findall(r"[\.\!\?]\s+[A-ZÄÖÜ]", inner)
+    return len(internal_boundaries) == 0
+
 def is_single_sentence(text: str) -> bool:
     """Erkennt deterministisch, ob ein Absatz aus genau 1 Satz mit Punkt am Ende besteht."""
     s = text.strip()
@@ -149,24 +174,6 @@ def is_single_sentence(text: str) -> bool:
     inner = clean[:-1].strip()
     internal_boundaries = re.findall(r"[\.\!\?]\s+[A-ZÄÖÜ]", inner)
     return len(internal_boundaries) == 0
-
-def is_one_or_two_sentences(text: str) -> bool:
-    """Erkennt deterministisch, ob ein Absatz aus 1 bis 2 Sätzen mit Punkt am Ende besteht."""
-    s = text.strip()
-    if not s.endswith((".", "!", "?")):
-        return False
-    if len(s) < 10 or len(s) > 500:
-        return False
-    # Entferne bekannte gängige Abkürzungen temporär für die Satzgrenzenprüfung
-    clean = re.sub(
-        r"\b(?:z\. B\.|d\. h\.|u\. a\.|u\. ä\.|bzw\.|ca\.|evtl\.|inkl\.|Dr\.|Prof\.|Hr\.|Fr\.|Nr\.|Abs\.|Art\.|Vgl\.|vgl\.|S\.|ff\.|etc\.|e\.g\.|i\.e\.)",
-        "ABBR",
-        s,
-        flags=re.IGNORECASE
-    )
-    inner = clean[:-1].strip()
-    internal_boundaries = re.findall(r"[\.\!\?]\s+[A-ZÄÖÜ]", inner)
-    return len(internal_boundaries) <= 1
 
 def is_author_name(candidate: str) -> bool:
     """Prüft zuverlässig, ob eine Zeichenkette den Namen einer realen Person / Autors darstellt."""
@@ -1620,46 +1627,12 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             typst_elements.append(f"{top_v}{''.join(list_lines)}")
             continue
 
-        # 10a. Überschrift 1: Ein Satz oder mehrere Wörter ohne Punkt am Ende (Zentriert & Fett)
-        is_heading_1 = (
-            not flat_text.endswith((".", "...", ";", ":", "!", "?")) and
-            len(flat_text) <= 300 and
-            len(lines_in_para) <= 3 and
-            not is_apa_citation(flat_text) and
-            not flat_text.startswith(("http://", "https://", "www.", "doi:")) and
-            not re.match(r"^https?://", flat_text) and
-            not any(flat_text.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "weil ", "dass ", "wenn ", "obwohl ", "währenddessen "])
-        )
-        if is_heading_1:
+        # 10. Überschriften: Alle einzelnen Sätze oder Phrasen (mit oder ohne Punkt) werden als Überschrift erkannt (Zentriert & Fett)
+        if is_heading_sentence(flat_text):
             h_text = format_content_to_typst(flat_text)
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
             typst_elements.append(
                 f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n"
-            )
-            continue
-
-        # 10b. Überschrift 2:
-        # AUSSCHLIESSLICH AM ANFANG vor dem ersten Fließtextabsatz: 1-2 Sätze mit Punkt am Ende.
-        # Sobald eine Überschrift 2 oder der erste Fließtextabsatz verarbeitet wurde,
-        # darf im gesamten restlichen Dokument KEINE Überschrift 2 mehr vorkommen!
-        is_heading_2 = False
-        if not heading_2_done and not first_body_para_done:
-            valid_sentence_structure = is_one_or_two_sentences(flat_text)
-            is_heading_2 = (
-                valid_sentence_structure and
-                15 <= len(flat_text) <= 500 and
-                len(lines_in_para) <= 6 and
-                not is_apa_citation(flat_text) and
-                not flat_text.startswith(("http://", "https://", "www.", "doi:")) and
-                not re.match(r"^https?://", flat_text) and
-                not any(flat_text.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "dass "])
-            )
-        if is_heading_2:
-            heading_2_done = True
-            h_text = format_content_to_typst(flat_text)
-            top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            typst_elements.append(
-                f"{top_v}#par(justify: true)[\n  #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n]\n"
             )
             continue
 
@@ -2077,28 +2050,8 @@ def parse_rtf_to_typst(
         is_lead_heading = (len(typst_blocks) <= 2) and is_fully_bold and len(p_plain_clean) <= 280
         is_section_heading = is_fully_bold and len(p_plain_clean) <= 160
 
-        # Nutzerregel:
-        # Überschrift 1: Ein Satz oder mehrere Wörter ohne Punkt am Ende (Zentriert & Fett)
-        is_heading_1 = (
-            not p_plain_clean.endswith((".", "...", ";", ":", "!", "?")) and
-            len(p_plain_clean) <= 300 and
-            not is_apa_citation(p_plain_clean) and
-            not any(p_plain_clean.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "weil ", "dass ", "wenn ", "obwohl "])
-        )
-
-        # Überschrift 2:
-        # AUSSCHLIESSLICH AM ANFANG vor dem ersten Fließtextabsatz: 1-2 Sätze mit Punkt am Ende.
-        # Sobald eine Überschrift 2 oder der erste Fließtextabsatz verarbeitet wurde,
-        # darf im gesamten restlichen Dokument KEINE Überschrift 2 mehr vorkommen!
-        is_heading_2 = False
-        if not heading_2_done and not first_body_para_done:
-            valid_sentence_rtf = is_one_or_two_sentences(p_plain_clean)
-            is_heading_2 = (
-                valid_sentence_rtf and
-                15 <= len(p_plain_clean) <= 500 and
-                not is_apa_citation(p_plain_clean) and
-                not any(p_plain_clean.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "dass "])
-            )
+        # Überschriften: Alle einzelnen Sätze oder Phrasen (mit oder ohne Punkt) werden als Überschrift erkannt (Zentriert & Fett)
+        is_heading_sentence_rtf = is_heading_sentence(p_plain_clean)
 
         top_v = "#v(0.8em)\n" if (p.get('has_blank_before') and typst_blocks) else ""
 
@@ -2106,13 +2059,9 @@ def parse_rtf_to_typst(
             typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    {content}\n  ]\n]")
         elif p['align'] == 'right':
             typst_blocks.append(f"{top_v}#align(right)[\n  #par(justify: false)[\n    {content}\n  ]\n]")
-        elif p['heading'] or is_section_heading or is_heading_1 or (is_lead_heading and not is_heading_2):
+        elif p['heading'] or is_section_heading or is_heading_sentence_rtf or is_lead_heading:
             inner_c = t_trimmed[8:-1] if is_fully_bold else content
             typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #strong[{inner_c}]\n  ]\n]\n")
-        elif is_heading_2:
-            heading_2_done = True
-            inner_c = t_trimmed[8:-1] if is_fully_bold else content
-            typst_blocks.append(f"{top_v}#par(justify: true)[\n  #strong[{inner_c}]\n]\n")
         else:
             if use_initial and not first_body_para_done:
                 content_init = apply_initial_to_typst_element(content)
