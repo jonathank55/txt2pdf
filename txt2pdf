@@ -1633,13 +1633,13 @@ def generate_bibliography_typst(
     body = "\n".join(entries_typst)
 
     return f"""
-#v(1.8em)
+#v(1.0em)
 #line(length: 100%, stroke: 0.3pt + rgb("#000000"))
-#v(1.2em)
+#v(0.6em)
 #align(center)[
   #text(size: {title_size}, weight: "bold", fill: rgb("#000000"))[{escape_typst_line(bib_title)}]
 ]
-#v(1.2em)
+#v(0.6em)
 
 #show link: set text(fill: rgb("#0b57d0"))
 #set text(font: {font_spec}, size: {font_size}, costs: (hyphenation: 2000%))
@@ -3292,7 +3292,7 @@ def convert_txt_to_pdf(
         date_part = f'\n        #v(1.0mm)\n        #block[#text(font: {author_font_spec}, size: 7.5pt, fill: rgb("#000000"))[{escape_typst_line(doc_date)}]]' if doc_date else ""
         top_header_box = f"""// Vollbreite-Titelbox mit Trennlinie (atk: Didot maximal dynamisch, einzeilig, zentriert)
 #place(top, scope: "parent", float: true)[
-  #block(width: 100%, inset: (bottom: 2.5mm))[
+  #block(width: 100%, inset: (bottom: 0.8mm))[
     #context {{
       let max-w = {max_title_w_val}mm
       let low = 10.0
@@ -3311,7 +3311,7 @@ def convert_txt_to_pdf(
         #block[#text(font: {title_font_spec}, size: best-sz, weight: "bold", fill: rgb("#000000"))[#strong[{escape_typst_line(doc_title)}]]]{author_part}{date_part}
       ]
     }}
-    #v(1.8mm)
+    #v(1.4mm)
     #line(length: 100%, stroke: 0.3pt + rgb("#000000"))
   ]
 ]
