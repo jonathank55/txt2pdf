@@ -1242,7 +1242,8 @@ def generate_bibliography_typst(
   hanging-indent: {hanging_indent},
   leading: {leading},
   spacing: {leading},
-  justify: true
+  justify: true,
+  linebreaks: "optimized"
 )
 
 {body}
@@ -2980,7 +2981,8 @@ def convert_txt_to_pdf(
   justify: true,
   leading: {final_leading},
   spacing: {final_leading},
-  first-line-indent: 0pt
+  first-line-indent: 0pt,
+  linebreaks: "optimized"
 )
 
 {top_header_box}
