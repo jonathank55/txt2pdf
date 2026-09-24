@@ -170,6 +170,32 @@ else
     echo -e "${GREEN}==>${NC} Caslon ist bereits vorhanden."
 fi
 
+# 3f. Prüfe und installiere Schriftart Garamond / EB Garamond
+echo -e "${BLUE}==>${NC} Prüfe Schriftart Garamond..."
+GARAMOND_INSTALLED=false
+
+if command -v typst &>/dev/null && typst fonts 2>/dev/null | grep -qi "Garamond"; then
+    GARAMOND_INSTALLED=true
+fi
+
+if [ -f "$FONTS_DIR/EBGaramond[wght].ttf" ] || [ -f "$FONTS_DIR/CormorantGaramond[wght].ttf" ]; then
+    GARAMOND_INSTALLED=true
+fi
+
+if [ "$GARAMOND_INSTALLED" = false ]; then
+    echo -e "${BLUE}==>${NC} Installiere EB Garamond und Cormorant Garamond nach $FONTS_DIR..."
+    curl -fsSL "https://raw.githubusercontent.com/google/fonts/main/ofl/ebgaramond/EBGaramond%5Bwght%5D.ttf" -o "$FONTS_DIR/EBGaramond[wght].ttf" 2>/dev/null || true
+    curl -fsSL "https://raw.githubusercontent.com/google/fonts/main/ofl/ebgaramond/EBGaramond-Italic%5Bwght%5D.ttf" -o "$FONTS_DIR/EBGaramond-Italic[wght].ttf" 2>/dev/null || true
+    curl -fsSL "https://raw.githubusercontent.com/google/fonts/main/ofl/cormorantgaramond/CormorantGaramond%5Bwght%5D.ttf" -o "$FONTS_DIR/CormorantGaramond[wght].ttf" 2>/dev/null || true
+    curl -fsSL "https://raw.githubusercontent.com/google/fonts/main/ofl/cormorantgaramond/CormorantGaramond-Italic%5Bwght%5D.ttf" -o "$FONTS_DIR/CormorantGaramond-Italic[wght].ttf" 2>/dev/null || true
+    if command -v fc-cache &>/dev/null; then
+        fc-cache -f "$FONTS_DIR" &>/dev/null || true
+    fi
+    echo -e "${GREEN}==>${NC} Garamond (EB Garamond & Cormorant Garamond) wurde erfolgreich eingerichtet."
+else
+    echo -e "${GREEN}==>${NC} Garamond ist bereits vorhanden."
+fi
+
 # 4. Prüfe und installiere DeepL Python-Bibliothek
 echo -e "${BLUE}==>${NC} Prüfe DeepL-Bibliothek..."
 if ! python3 -c "import deepl" &>/dev/null; then

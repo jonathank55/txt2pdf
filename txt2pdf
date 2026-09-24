@@ -1084,6 +1084,14 @@ FONT_DEFINITIONS = {
         "name": "Baskerville",
         "spec": '("Baskerville", "Libre Baskerville", "Baskerville Old Face", "PT Serif", "Times New Roman")',
     },
+    "garamond": {
+        "name": "Garamond",
+        "spec": '("EB Garamond", "Cormorant Garamond", "Garamond", "PT Serif", "Times New Roman")',
+    },
+    "eb garamond": {
+        "name": "EB Garamond",
+        "spec": '("EB Garamond", "Cormorant Garamond", "Garamond", "PT Serif", "Times New Roman")',
+    },
 }
 
 def resolve_font_spec(font_arg: str = None, fmt: str = "br2") -> Tuple[str, str]:
@@ -1095,14 +1103,16 @@ def resolve_font_spec(font_arg: str = None, fmt: str = "br2") -> Tuple[str, str]
                 return FONT_DEFINITIONS[cleaned]["spec"], FONT_DEFINITIONS[cleaned]["name"]
             return f'("{font_arg.strip()}", "Optima", "PT Serif", "Times New Roman")', font_arg.strip()
 
-    if fmt in ("atk1", "atk2", "atk"):
+    if fmt in ("atk2", "atk"):
+        return FONT_DEFINITIONS["garamond"]["spec"], "Garamond"
+    elif fmt == "atk1":
         return FONT_DEFINITIONS["big caslon"]["spec"], "Big Caslon"
     elif fmt in ("br2", "br1"):
         return FONT_DEFINITIONS["pt serif"]["spec"], "PT Serif"
     elif fmt == "apa":
         return FONT_DEFINITIONS["times new roman"]["spec"], "Times New Roman"
     else:
-        return FONT_DEFINITIONS["big caslon"]["spec"], "Big Caslon"
+        return FONT_DEFINITIONS["garamond"]["spec"], "Garamond"
 
 def resolve_title_font_spec(fmt: str, body_font_spec: str) -> str:
     """Löst die typografische Schriftartenspezifikation für die Hauptüberschrift (Titel) auf."""
@@ -1115,13 +1125,13 @@ def resolve_heading_font_spec(fmt: str, body_font_spec: str) -> str:
     return body_font_spec
 
 def install_core_fonts() -> bool:
-    """Überprüft und installiert fehlende Kernschriftarten (PT Serif, Roboto, GFS Didot, Libre Baskerville, Libre Caslon) für Typst."""
+    """Überprüft und installiert fehlende Kernschriftarten (PT Serif, Roboto, GFS Didot, Libre Baskerville, Libre Caslon, EB Garamond, Cormorant Garamond) für Typst."""
     home = os.path.expanduser("~")
     is_mac = (sys.platform == "darwin")
     font_dir = os.path.join(home, "Library", "Fonts") if is_mac else os.path.join(home, ".local", "share", "fonts")
     os.makedirs(font_dir, exist_ok=True)
 
-    print("Prüfe Kernschriftarten für txt2pdf (Times New Roman, PT Serif, Optima, Roboto, Monaco, Didot, Cochin, Big Caslon, Baskerville)...")
+    print("Prüfe Kernschriftarten für txt2pdf (Times New Roman, PT Serif, Optima, Roboto, Monaco, Didot, Cochin, Big Caslon, Baskerville, Garamond)...")
 
     if is_mac and shutil.which("brew"):
         try:
@@ -1145,6 +1155,10 @@ def install_core_fonts() -> bool:
         "LibreCaslonText[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/librecaslontext/LibreCaslonText%5Bwght%5D.ttf",
         "LibreCaslonText-Italic[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/librecaslontext/LibreCaslonText-Italic%5Bwght%5D.ttf",
         "LibreCaslonDisplay-Regular.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/librecaslondisplay/LibreCaslonDisplay-Regular.ttf",
+        "EBGaramond[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/ebgaramond/EBGaramond%5Bwght%5D.ttf",
+        "EBGaramond-Italic[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/ebgaramond/EBGaramond-Italic%5Bwght%5D.ttf",
+        "CormorantGaramond[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/cormorantgaramond/CormorantGaramond%5Bwght%5D.ttf",
+        "CormorantGaramond-Italic[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/cormorantgaramond/CormorantGaramond-Italic%5Bwght%5D.ttf",
     }
 
     import urllib.request
@@ -3047,14 +3061,14 @@ def main():
     RESET = "\033[0m"
 
     fmt_help = (
-        f"Format: {BLUE}atk2{RESET} (Artikel, 3 Spalten, Big Caslon, mit Linie, Titel: Didot 36pt zentriert; Standard), "
+        f"Format: {BLUE}atk2{RESET} (Artikel, 3 Spalten, Garamond, mit Linie, Titel: Didot 36pt zentriert; Standard), "
         f"{BLUE}atk1{RESET} (Artikel, 3 Spalten, Big Caslon, ohne Linie), "
         f"{BLUE}br2{RESET} (Bericht, 2 Spalten, PT Serif), "
         f"{BLUE}br1{RESET} (Bericht, 1 Spalte, PT Serif), "
         f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter)"
     )
     size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 10pt bei atk2, 9pt bei atk1, 12pt bei br2/br1; entfällt bei apa)"
-    font_help = f"Schriftart ({BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, {BLUE}Didot{RESET}, {BLUE}Cochin{RESET}, {BLUE}Big Caslon{RESET}, {BLUE}Baskerville{RESET}, {BLUE}Roboto{RESET}, {BLUE}Monaco{RESET})"
+    font_help = f"Schriftart ({BLUE}Garamond{RESET}, {BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, {BLUE}Didot{RESET}, {BLUE}Cochin{RESET}, {BLUE}Big Caslon{RESET}, {BLUE}Baskerville{RESET}, {BLUE}Roboto{RESET}, {BLUE}Monaco{RESET})"
     margin_help = f"Ränder ({BLUE}k{RESET} (klein; Standard bei atk2), {BLUE}m{RESET} (mittel), {BLUE}g{RESET} (groß); entfällt bei apa)"
 
     parser = argparse.ArgumentParser(
