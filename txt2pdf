@@ -1099,6 +1099,10 @@ FONT_DEFINITIONS = {
         "name": "EB Garamond",
         "spec": '("EB Garamond", "Cormorant Garamond", "Garamond", "PT Serif", "Times New Roman")',
     },
+    "faustina": {
+        "name": "Faustina",
+        "spec": '("Faustina", "EB Garamond", "PT Serif", "Times New Roman")',
+    },
 }
 
 def resolve_font_spec(font_arg: str = None, fmt: str = "br2") -> Tuple[str, str]:
@@ -1130,13 +1134,13 @@ def resolve_heading_font_spec(fmt: str, body_font_spec: str) -> str:
     return body_font_spec
 
 def install_core_fonts() -> bool:
-    """Überprüft und installiert fehlende Kernschriftarten (PT Serif, Roboto, GFS Didot, Libre Baskerville, Libre Caslon, EB Garamond, Cormorant Garamond) für Typst."""
+    """Überprüft und installiert fehlende Kernschriftarten (PT Serif, Roboto, GFS Didot, Libre Baskerville, Libre Caslon, EB Garamond, Cormorant Garamond, Faustina) für Typst."""
     home = os.path.expanduser("~")
     is_mac = (sys.platform == "darwin")
     font_dir = os.path.join(home, "Library", "Fonts") if is_mac else os.path.join(home, ".local", "share", "fonts")
     os.makedirs(font_dir, exist_ok=True)
 
-    print("Prüfe Kernschriftarten für txt2pdf (Times New Roman, PT Serif, Optima, Roboto, Monaco, Didot, Cochin, Big Caslon, Baskerville, Garamond)...")
+    print("Prüfe Kernschriftarten für txt2pdf (Times New Roman, PT Serif, Optima, Roboto, Monaco, Didot, Cochin, Big Caslon, Baskerville, Garamond, Faustina)...")
 
     if is_mac and shutil.which("brew"):
         try:
@@ -1164,6 +1168,8 @@ def install_core_fonts() -> bool:
         "EBGaramond-Italic[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/ebgaramond/EBGaramond-Italic%5Bwght%5D.ttf",
         "CormorantGaramond[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/cormorantgaramond/CormorantGaramond%5Bwght%5D.ttf",
         "CormorantGaramond-Italic[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/cormorantgaramond/CormorantGaramond-Italic%5Bwght%5D.ttf",
+        "Faustina[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/faustina/Faustina%5Bwght%5D.ttf",
+        "Faustina-Italic[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/faustina/Faustina-Italic%5Bwght%5D.ttf",
     }
 
     import urllib.request
@@ -2823,7 +2829,13 @@ def convert_txt_to_pdf(
 
     if fmt == "atk":
         author_font_spec = '("Calibre", "Helvetica Neue", "Helvetica", "Arial", "Roboto", "sans-serif")'
-        author_text = doc_author.upper() if doc_author else ""
+        if doc_author:
+            clean_a = doc_author.strip()
+            if not clean_a.upper().startswith("VON "):
+                clean_a = f"VON {clean_a}"
+            author_text = clean_a.upper()
+        else:
+            author_text = ""
         author_part = f'\n        #v(5.5mm)\n        #block[#text(font: {author_font_spec}, size: 8.5pt, weight: "regular", tracking: 0.08em, fill: rgb("#000000"))[{escape_typst_line(author_text)}]]' if doc_author else ""
         date_part = f'\n        #v(1.0mm)\n        #block[#text(font: {author_font_spec}, size: 7.5pt, fill: rgb("#000000"))[{escape_typst_line(doc_date)}]]' if doc_date else ""
         top_header_box = f"""// Vollbreite-Titelbox mit Trennlinie (atk: Didot maximal dynamisch, einzeilig, zentriert)
@@ -2855,7 +2867,10 @@ def convert_txt_to_pdf(
     else:
         author_block = ""
         if doc_author:
-            author_block = f'\n        #v(1.4mm)\n        #block[#text(style: "italic", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(doc_author)}]]'
+            clean_a = doc_author.strip()
+            if not clean_a.lower().startswith("von "):
+                clean_a = f"von {clean_a}"
+            author_block = f'\n        #v(1.4mm)\n        #block[#text(style: "italic", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(clean_a)}]]'
 
         if doc_date:
             header_content = f"""#grid(
@@ -2989,7 +3004,7 @@ def main():
         f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter)"
     )
     size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 10pt bei atk, 12pt bei br2/br1; entfällt bei apa)"
-    font_help = f"Schriftart ({BLUE}Garamond{RESET}, {BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, {BLUE}Didot{RESET}, {BLUE}Cochin{RESET}, {BLUE}Big Caslon{RESET}, {BLUE}Baskerville{RESET}, {BLUE}Roboto{RESET}, {BLUE}Monaco{RESET})"
+    font_help = f"Schriftart ({BLUE}Garamond{RESET}, {BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, {BLUE}Didot{RESET}, {BLUE}Cochin{RESET}, {BLUE}Big Caslon{RESET}, {BLUE}Baskerville{RESET}, {BLUE}Faustina{RESET}, {BLUE}Roboto{RESET}, {BLUE}Monaco{RESET})"
     margin_help = f"Ränder ({BLUE}k{RESET} (klein; Standard bei atk), {BLUE}m{RESET} (mittel), {BLUE}g{RESET} (groß); entfällt bei apa)"
 
     parser = argparse.ArgumentParser(
