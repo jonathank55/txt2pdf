@@ -332,9 +332,10 @@ def is_valid_isbn(raw: str) -> bool:
 
 def extract_isbns_from_text(text: str) -> List[str]:
     """Extrahiert alle gültigen ISBN-10 und ISBN-13 Nummern aus einem Text."""
-    matches = re.findall(r"\b(?:ISBN(?:-1[03])?:?\s*)?([0-9Xx]{1}[0-9Xx\-\s]{8,16}[0-9Xx])\b", text)
+    m13 = re.findall(r"\b(?:ISBN(?:-13)?:?\s*)?(97[89][\s\-]*(?:\d[\s\-]*){9}\d)\b", text, re.I)
+    m10 = re.findall(r"\b(?:ISBN(?:-10)?:?\s*)?(\d[\s\-]*(?:\d[\s\-]*){8}[\dXx])\b", text, re.I)
     res = []
-    for cand in matches:
+    for cand in m13 + m10:
         c = clean_isbn(cand)
         if c and is_valid_isbn(c) and c not in res:
             res.append(c)
@@ -798,7 +799,8 @@ def fetch_isbn_metadata_resilient(isbn_str: str) -> Optional[Dict[str, any]]:
             with urllib.request.urlopen(req, timeout=3.5) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 if not title:
-                    title = data.get("title", "")
+                    raw_t = data.get("title", "")
+                    title = raw_t.replace("¬", "").strip()
                 if not year:
                     pub_ev = data.get("publication", [])
                     if pub_ev and isinstance(pub_ev, list):
@@ -813,9 +815,20 @@ def fetch_isbn_metadata_resilient(isbn_str: str) -> Optional[Dict[str, any]]:
                 if not authors:
                     contribs = data.get("contribution", [])
                     for c in contribs:
-                        ag = c.get("agent", {})
-                        if ag.get("label"):
-                            authors.append(ag["label"])
+                        role_info = c.get("role", {})
+                        role_id = role_info.get("id", "")
+                        role_lbl = role_info.get("label", "").lower()
+                        if "/aut" in role_id or "autor" in role_lbl or "author" in role_lbl:
+                            ag = c.get("agent", {})
+                            if ag.get("label"):
+                                authors.append(ag["label"])
+                    if not authors:
+                        for c in contribs:
+                            role_id = c.get("role", {}).get("id", "")
+                            if not any(stop in role_id for stop in ["trl", "dtc", "pbl", "prt"]):
+                                ag = c.get("agent", {})
+                                if ag.get("label") and ag.get("type") == ["Person"]:
+                                    authors.append(ag["label"])
         except Exception:
             pass
 
@@ -1913,14 +1926,19 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             continue
 
         # 6. Literaturverzeichnis-Abschnittsüberschrift oder reiner Bibliografie-Block
-        words_in_para = flat_text.split()
-        is_all_urls = bool(words_in_para and all(
-            w.startswith(("http://", "https://", "doi:", "10.")) or
-            w.lower() in ("doi.org", "url:", "quelle:", "quellen:", "links:", "link:") or
-            re.match(r"^https?://", w) or
-            re.match(r"^10\.\d{4,9}/", w)
-            for w in words_in_para
-        ))
+        def is_source_line_check(line_str: str) -> bool:
+            s_l = line_str.strip()
+            if not s_l:
+                return False
+            if s_l.startswith(("http://", "https://", "doi:", "10.")) or re.match(r"^https?://", s_l) or re.match(r"^10\.\d{4,9}/", s_l):
+                return True
+            if bool(extract_isbns_from_text(s_l)):
+                return True
+            if is_apa_citation(s_l):
+                return True
+            return False
+
+        is_all_urls = bool(lines_in_para and all(is_source_line_check(l) for l in lines_in_para))
 
         m_bib_header = bib_header_inline_regex.match(flat_text)
         if m_bib_header:
