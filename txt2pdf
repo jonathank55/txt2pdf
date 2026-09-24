@@ -1262,7 +1262,7 @@ def generate_bibliography_typst(
 
     return f"""
 #v(1.8em)
-#line(length: 100%, stroke: 0.5pt + rgb("#000000"))
+#line(length: 100%, stroke: 0.3pt + rgb("#000000"))
 #v(1.2em)
 #align(center)[
   #text(size: {title_size}, weight: "bold", fill: rgb("#000000"))[{escape_typst_line(bib_title)}]
@@ -2868,7 +2868,7 @@ def convert_txt_to_pdf(
       ]
     }}
     #v(1.8mm)
-    #line(length: 100%, stroke: 0.5pt + rgb("#000000"))
+    #line(length: 100%, stroke: 0.3pt + rgb("#000000"))
   ]
 ]
 """
@@ -2902,7 +2902,7 @@ def convert_txt_to_pdf(
   #block(width: 100%, inset: (bottom: 2.5mm))[
     {header_content}
     #v(1.2mm)
-    #line(length: 100%, stroke: 0.5pt + rgb("#000000"))
+    #line(length: 100%, stroke: 0.3pt + rgb("#000000"))
   ]
 ]
 """
