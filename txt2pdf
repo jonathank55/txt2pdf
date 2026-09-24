@@ -209,6 +209,9 @@ def is_author_name(candidate: str) -> bool:
     s_clean = re.sub(title_pattern, "", s, flags=re.IGNORECASE)
     s_clean = re.sub(suffix_pattern, "", s_clean, flags=re.IGNORECASE).strip()
 
+    if re.search(r"\d", s_clean):
+        return False
+
     if "," in s_clean:
         parts = [p.strip() for p in s_clean.split(",")]
         if len(parts) != 2 or len(parts[0].split()) > 2 or len(parts[1].split()) > 2:
@@ -1667,7 +1670,7 @@ def format_figure_typst(img_path: str, caption_title: str = "", source: str = ""
         f"]\n#v(2.5mm)\n"
     )
 
-def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str = "6pt", use_initial: bool = True, doc_dir: str = "", hanging_indent: str = "6mm", title_font_spec: str = None) -> Tuple[str, List[str], List[str], str, bool]:
+def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str = "6pt", use_initial: bool = True, doc_dir: str = "", hanging_indent: str = "6mm", title_font_spec: str = None, fmt: str = "atk") -> Tuple[str, List[str], List[str], str, bool]:
     """Wandelt Textzeilen in Typst-Code um, verarbeitet Überschriften, trennt APA-Zitate für die Extraseite und extrahiert Links."""
     full_raw_text = "\n".join(raw_lines)
     all_urls = extract_urls_from_text(full_raw_text)
@@ -1862,7 +1865,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                 typst_elements.append(f"{top_v}{fig_code}")
                 continue
 
-        # 1. Zitat-Zwischenüberschriften (fett, zentriert)
+        # 1. Zitat-Zwischenüberschriften (fett, bei atk zentriert, bei br1/br2 im Blocktextformat)
         is_quote_heading = (
             len(flat_text) <= 280 and (
                 (flat_text.startswith("»") and flat_text.endswith("«")) or
@@ -1874,9 +1877,12 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         if is_quote_heading:
             escaped = format_content_to_typst(flat_text)
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            typst_elements.append(
-                f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped}]\n  ]\n]\n"
-            )
+            if fmt in ("br1", "br2"):
+                typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped}]\n")
+            else:
+                typst_elements.append(
+                    f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped}]\n  ]\n]\n"
+                )
             continue
 
         # 2. Markdown-Blockquote (> ...)
@@ -1884,7 +1890,12 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             quote_text = " ".join(re.sub(r"^>\s*", "", l).strip() for l in lines_in_para)
             escaped_quote = format_content_to_typst(quote_text)
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            if len(quote_text) <= 200:
+            if fmt in ("br1", "br2"):
+                typst_elements.append(
+                    f"{top_v}#block(inset: (left: 2.5mm), stroke: (left: 1.5pt + rgb(\"#000000\")))"
+                    f"[#text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_quote}]]\n"
+                )
+            elif len(quote_text) <= 200:
                 typst_elements.append(
                     f"{top_v}#align(center)[\n  #block(width: 95%)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_quote}]\n  ]\n]\n"
                 )
@@ -1987,15 +1998,18 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                     explicit_bib_entries.append(l)
             continue
 
-        # 8. Versalien-Überschriften (ALL CAPS / Großbuchstaben) -> Große Überschrift: Zentriert & Fett
+        # 8. Versalien-Überschriften (ALL CAPS / Großbuchstaben) -> Große Überschrift: bei atk zentriert, bei br1/br2 im Blocktextformat
         alpha_chars = re.findall(r"[A-Za-zÄÖÜäöüß]", flat_text)
         is_all_caps = len(alpha_chars) >= 3 and flat_text.isupper() and len(flat_text) <= 200 and len(flat_text.split()) <= 20
         if is_all_caps:
             h_text = escape_typst_line(flat_text)
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            typst_elements.append(
-                f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n"
-            )
+            if fmt in ("br1", "br2"):
+                typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
+            else:
+                typst_elements.append(
+                    f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n"
+                )
             continue
 
         # 9. Aufzählungspunkte
@@ -2008,13 +2022,16 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             typst_elements.append(f"{top_v}{''.join(list_lines)}")
             continue
 
-        # 10. Überschriften: Alle einzelnen Sätze oder Phrasen (mit oder ohne Punkt) werden als Überschrift erkannt (Zentriert & Fett)
+        # 10. Überschriften: Alle einzelnen Sätze oder Phrasen (mit oder ohne Punkt) werden als Überschrift erkannt (bei atk zentriert, bei br1/br2 im Blocktextformat)
         if is_heading_sentence(flat_text):
             h_text = format_content_to_typst(flat_text)
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            typst_elements.append(
-                f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n"
-            )
+            if fmt in ("br1", "br2"):
+                typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
+            else:
+                typst_elements.append(
+                    f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n"
+                )
             continue
 
         # 11. Regulärer Fließtextabsatz (Standard mit optionalem Initial im 1. Fließtext-Absatz)
@@ -2411,7 +2428,7 @@ def parse_rtf_to_typst(
             rtf_bib_entries.append(content)
             continue
 
-        # Zitate in Anführungszeichen immer normal zentrieren
+        # Zitate in Anführungszeichen (bei atk zentriert, bei br1/br2 im Blocktextformat)
         is_quote = (
             len(p_plain_clean) <= 350 and (
                 (p_plain_clean.startswith("»") and p_plain_clean.endswith("«")) or
@@ -2425,7 +2442,10 @@ def parse_rtf_to_typst(
             if not t_content.startswith("#strong["):
                 t_content = f"#strong[{t_content}]"
             top_v = "#v(0.8em)\n" if (p.get('has_blank_before') and typst_blocks) else ""
-            typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(fill: rgb(\"#000000\"))[{t_content}]\n  ]\n]\n")
+            if fmt in ("br1", "br2"):
+                typst_blocks.append(f"{top_v}#text(fill: rgb(\"#000000\"))[{t_content}]\n")
+            else:
+                typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(fill: rgb(\"#000000\"))[{t_content}]\n  ]\n]\n")
             continue
 
         # Fette Lead-Überschrift oder explizite Überschriften
@@ -2434,7 +2454,7 @@ def parse_rtf_to_typst(
         is_lead_heading = (len(typst_blocks) <= 2) and is_fully_bold and len(p_plain_clean) <= 280
         is_section_heading = is_fully_bold and len(p_plain_clean) <= 160
 
-        # Überschriften: Alle einzelnen Sätze oder Phrasen (mit oder ohne Punkt) werden als Überschrift erkannt (Zentriert & Fett)
+        # Überschriften: Alle einzelnen Sätze oder Phrasen (mit oder ohne Punkt) werden als Überschrift erkannt (bei atk zentriert, bei br1/br2 im Blocktextformat)
         is_heading_sentence_rtf = is_heading_sentence(p_plain_clean)
 
         top_v = "#v(0.8em)\n" if (p.get('has_blank_before') and typst_blocks) else ""
@@ -2445,7 +2465,10 @@ def parse_rtf_to_typst(
             typst_blocks.append(f"{top_v}#align(right)[\n  #par(justify: false)[\n    {content}\n  ]\n]")
         elif p['heading'] or is_section_heading or is_heading_sentence_rtf or is_lead_heading:
             inner_c = t_trimmed[8:-1] if is_fully_bold else content
-            typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #strong[{inner_c}]\n  ]\n]\n")
+            if fmt in ("br1", "br2"):
+                typst_blocks.append(f"{top_v}#strong[{inner_c}]\n")
+            else:
+                typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #strong[{inner_c}]\n  ]\n]\n")
         else:
             if use_initial and not first_body_para_done:
                 content_init = apply_initial_to_typst_element(content, font_spec=title_font_spec)
@@ -2999,7 +3022,7 @@ def convert_txt_to_pdf(
         final_initial = use_initial if use_initial is not None else False
         final_gutter = gutter if gutter is not None else "0mm"
         final_font_size = font_size if font_size is not None else "12pt"
-        default_leading = "0.35em"
+        default_leading = "1.15em"
     else:  # br2 (Standard: 2 Spalten, 12pt Textgröße, Optima)
         final_columns = columns if columns is not None else 2
         final_initial = use_initial if use_initial is not None else False
@@ -3130,7 +3153,7 @@ def convert_txt_to_pdf(
             body_lines = translated_body
 
         body_text, urls, explicit_bib_entries, bib_heading_title, doc_has_indents = parse_body_to_typst(
-            body_lines, images=images, caption_size=caption_size, use_initial=final_initial, doc_dir=doc_dir, hanging_indent=hanging_indent, title_font_spec=title_font_spec
+            body_lines, images=images, caption_size=caption_size, use_initial=final_initial, doc_dir=doc_dir, hanging_indent=hanging_indent, title_font_spec=title_font_spec, fmt=fmt
         )
 
     if is_rtf:
