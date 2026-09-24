@@ -41,7 +41,7 @@ txt2pdf DATEI [OPTIONEN]
 - `-f FORMAT`  : Format-Vorgabe (`atk2` für 3-Spalten-Artikel mit Big Caslon 10pt Fließtext, zentriertem dynamisch einzeiligem Didot-Titel und Trennlinie [Standard], `atk1` für 3-Spalten-Artikel mit Big Caslon ohne Trennlinie, `br2` für 2-Spalten-Bericht mit PT Serif, `br1` für 1-Spalten-Bericht mit PT Serif, `apa` für 7. Edition APA-Bericht).
 - `-z SCHRIFT` : Schriftart wählen (`Times New Roman`, `PT Serif`, `Optima`, `Didot`, `Cochin`, `Big Caslon`, `Baskerville`, `Roboto`, `Monaco`).
 - `-s GRÖßE`   : Fließtext-Größe (`6pt` bis `12pt`, Standard: 10pt bei `atk2`, 9pt bei `atk1`, 12pt bei `br1`/`br2`/`apa`).
-- `-r RÄNDER`  : Ränder (`k` für klein: 10mm x, 12mm y; `m` für mittel: 16mm x, 18mm y [Standard]; `g` für groß: 22mm x, 24mm y; gilt für alle Formate außer `apa`).
+- `-r RÄNDER`  : Ränder (`k` für klein: 10mm x, 12mm y [Standard bei `atk2`]; `m` für mittel: 16mm x, 18mm y; `g` für groß: 22mm x, 24mm y; gilt für alle Formate außer `apa`).
 - `-i BILD`    : Abbildung einbinden (Syntax `##Pfad/zur/Datei` direkt im Textdokument verwenden).
 - `-a AUTOR`   : Autor manuell überschreiben (bei `atk2` in Didot aufrecht gerendert, bei anderen Profilen kursiv).
 - `-t TITEL`   : Titel manuell überschreiben (Hauptüberschriften sind verbindlich 10pt bei `atk1` bzw. 6pt bei sonstigen Profilen größer als der Text).
