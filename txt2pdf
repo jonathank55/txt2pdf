@@ -2795,11 +2795,20 @@ def convert_txt_to_pdf(
         doc_date = date if date else extracted_date
         doc_title, doc_author = clean_title_and_author(raw_title, target_author, fallback_author=file_author_candidate)
 
-    # Ränder-Auflösung (-r k | m | g bzw. klein | mittel | groß; Standard: m)
-    # Gilt für alle Formate außer APA (APA erzwingt 25.4mm rundum)
-    margin_x = "16mm"
-    margin_y = "18mm"
-    max_title_w_val = 178
+    # Ränder-Auflösung (-r k | m | g bzw. klein | mittel | groß)
+    # Standard: 'g' (groß) bei atk2, 'm' (mittel) bei atk1, br2, br1; entfällt bei APA (25.4mm)
+    if fmt == "atk2":
+        default_margin_x = "22mm"
+        default_margin_y = "24mm"
+        default_max_title_w = 166
+    else:
+        default_margin_x = "16mm"
+        default_margin_y = "18mm"
+        default_max_title_w = 178
+
+    margin_x = default_margin_x
+    margin_y = default_margin_y
+    max_title_w_val = default_max_title_w
 
     if margins is not None:
         m_raw = str(margins).lower().strip()
@@ -3041,7 +3050,7 @@ def main():
     )
     size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 10pt bei atk2, 9pt bei atk1, 12pt bei br2/br1; entfällt bei apa)"
     font_help = f"Schriftart ({BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, {BLUE}Didot{RESET}, {BLUE}Cochin{RESET}, {BLUE}Big Caslon{RESET}, {BLUE}Baskerville{RESET}, {BLUE}Roboto{RESET}, {BLUE}Monaco{RESET})"
-    margin_help = f"Ränder ({BLUE}k{RESET} (klein), {BLUE}m{RESET} (mittel, Standard), {BLUE}g{RESET} (groß); entfällt bei apa)"
+    margin_help = f"Ränder ({BLUE}k{RESET} (klein), {BLUE}m{RESET} (mittel), {BLUE}g{RESET} (groß; Standard bei atk2); entfällt bei apa)"
 
     parser = argparse.ArgumentParser(
         prog="txt2pdf",
