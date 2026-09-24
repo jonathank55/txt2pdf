@@ -3175,11 +3175,15 @@ def convert_txt_to_pdf(
         doc_title, doc_author = clean_title_and_author(raw_title, target_author, fallback_author=file_author_candidate)
 
     # Ränder-Auflösung (-r k | m | g bzw. klein | mittel | groß)
-    # Standard: 'k' (klein) bei atk, 'm' (mittel) bei br2, br1; entfällt bei APA (25.4mm)
+    # Standard: 'k' (klein) bei atk, 'g' (groß) bei br1, 'm' (mittel) bei br2; entfällt bei APA (25.4mm)
     if fmt == "atk":
         default_margin_x = "10mm"
         default_margin_y = "12mm"
         default_content_w = 190
+    elif fmt == "br1":
+        default_margin_x = "22mm"
+        default_margin_y = "24mm"
+        default_content_w = 166
     else:
         default_margin_x = "16mm"
         default_margin_y = "18mm"
@@ -3448,7 +3452,7 @@ def main():
     )
     size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 10pt bei atk, 12pt bei br2/br1; entfällt bei apa)"
     font_help = f"Schriftart ({BLUE}Garamond{RESET}, {BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, {BLUE}Didot{RESET}, {BLUE}Cochin{RESET}, {BLUE}Big Caslon{RESET}, {BLUE}Baskerville{RESET}, {BLUE}Faustina{RESET}, {BLUE}Roboto{RESET}, {BLUE}Monaco{RESET})"
-    margin_help = f"Ränder ({BLUE}k{RESET} (klein; Standard bei atk), {BLUE}m{RESET} (mittel), {BLUE}g{RESET} (groß); entfällt bei apa)"
+    margin_help = f"Ränder ({BLUE}k{RESET} (klein: 10/12mm; Standard bei atk), {BLUE}m{RESET} (mittel: 16/18mm; Standard bei br2), {BLUE}g{RESET} (groß: 22/24mm; Standard bei br1); entfällt bei apa)"
 
     parser = argparse.ArgumentParser(
         prog="txt2pdf",
