@@ -41,7 +41,7 @@ txt2pdf DATEI [OPTIONEN]
 - `-f FORMAT`  : Format-Vorgabe (`atk` für 3-Spalten-Artikel mit Garamond 10pt Fließtext, zentriertem dynamisch einzeiligem Didot-Titel und Trennlinie [Standard], `br2` für 2-Spalten-Bericht mit PT Serif, `br1` für 1-Spalten-Bericht mit PT Serif, `apa` für 7. Edition APA-Bericht).
 - `-z SCHRIFT` : Schriftart wählen (`Garamond`, `Times New Roman`, `PT Serif`, `Optima`, `Didot`, `Cochin`, `Big Caslon`, `Baskerville`, `Faustina`, `Roboto`, `Monaco`).
 - `-s GRÖßE`   : Fließtext-Größe (`6pt` bis `12pt`, Standard: 10pt bei `atk`, 12pt bei `br1`/`br2`/`apa`).
-- `-r RÄNDER`  : Ränder (`k` für klein: 10mm x, 12mm y [Standard bei `atk`]; `m` für mittel: 16mm x, 18mm y; `g` für groß: 22mm x, 24mm y; gilt für alle Formate außer `apa`).
+- `-r RÄNDER`  : Ränder (`k` für klein: 10mm x, 12mm y [Standard bei `atk`]; `m` für mittel: 16mm x, 18mm y; `g` für groß: 22mm x, 24mm y [Standard bei `br2`]; `r` für riesig: 28mm x, 30mm y [Standard bei `br1`]; gilt für alle Formate außer `apa`).
 - `-i BILD`    : Abbildung einbinden (Syntax `##Pfad/zur/Datei` direkt im Textdokument verwenden).
 - `-a AUTOR`   : Autor manuell überschreiben (bei `atk` mit vorangestelltem `VON` in Calibre/Helvetica Versalien, bei anderen Profilen kursiv).
 - `-t TITEL`   : Titel manuell überschreiben (Hauptüberschrift bei `atk` dynamisch einzeilig in Didot skaliert, bei sonstigen Berichts-Profilen 6pt größer als der Text).
