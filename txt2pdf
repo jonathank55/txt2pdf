@@ -2827,7 +2827,7 @@ def convert_txt_to_pdf(
     if fmt in ("atk1", "atk2"):
         if fmt == "atk2":
             author_font_spec = FONT_DEFINITIONS["didot"]["spec"]
-            author_part = f'\n        #v(5.0mm)\n        #block[#text(font: {author_font_spec}, style: "normal", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(doc_author)}]]' if doc_author else ""
+            author_part = f'\n        #v(6.5mm)\n        #block[#text(font: {author_font_spec}, style: "normal", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(doc_author)}]]' if doc_author else ""
             date_part = f'\n        #v(1.0mm)\n        #block[#text(size: 8pt, fill: rgb("#000000"))[{escape_typst_line(doc_date)}]]' if doc_date else ""
             top_header_box = f"""// Vollbreite-Titelbox mit Trennlinie (atk2: Didot maximal dynamisch, einzeilig, zentriert)
 #place(top, scope: "parent", float: true)[
