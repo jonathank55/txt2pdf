@@ -291,20 +291,82 @@ def is_matching_title(candidate: str, target: str) -> bool:
 def is_apa_citation(text: str) -> bool:
     """Erkennt deterministisch, ob ein Absatz einen normgerechten APA-Quellennachweis darstellt."""
     s = text.strip()
-    if len(s) < 20:
+    if len(s) < 10:
         return False
+    if bool(extract_isbns_from_text(s)):
+        return True
     m_yr = re.search(r"\(\s*(?:(?:19|20)\d{2}|n\.d\.|o\.\s*D\.)(?:,\s*[^)]+)?\s*\)", s)
     if not m_yr:
         return False
     prefix = s[:m_yr.start()].strip()
     if not prefix or len(prefix) > 150:
         return False
-    if any(k in s for k in ("http://", "https://", "doi.org", "doi:", "S.", "pp.", "Vol.", "Nr.", "Issue")):
+    if any(k in s for k in ("http://", "https://", "doi.org", "doi:", "S.", "pp.", "Vol.", "Nr.", "Issue", "Hrsg.", "Ed.", "Eds.", "In ", "in ")):
         return True
     after = s[m_yr.end():].strip()
     if after.startswith((".", ":")):
         return True
     return False
+
+def clean_isbn(raw: str) -> Optional[str]:
+    """Bereinigt einen ISBN-String und behält nur Ziffern sowie das Prüfzeichen X."""
+    if not raw:
+        return None
+    s = re.sub(r"[^0-9X]", "", raw.upper())
+    if len(s) in (10, 13):
+        return s
+    return None
+
+def is_valid_isbn(raw: str) -> bool:
+    """Validiert eine ISBN-10 oder ISBN-13 deterministisch über ihre Prüfziffer."""
+    s = clean_isbn(raw)
+    if not s:
+        return False
+    if len(s) == 10:
+        total = sum((10 - i) * (10 if c == "X" else int(c)) for i, c in enumerate(s))
+        return total % 11 == 0
+    elif len(s) == 13:
+        total = sum(int(c) * (1 if i % 2 == 0 else 3) for i, c in enumerate(s))
+        return total % 10 == 0
+    return False
+
+def extract_isbns_from_text(text: str) -> List[str]:
+    """Extrahiert alle gültigen ISBN-10 und ISBN-13 Nummern aus einem Text."""
+    matches = re.findall(r"\b(?:ISBN(?:-1[03])?:?\s*)?([0-9Xx]{1}[0-9Xx\-\s]{8,16}[0-9Xx])\b", text)
+    res = []
+    for cand in matches:
+        c = clean_isbn(cand)
+        if c and is_valid_isbn(c) and c not in res:
+            res.append(c)
+    return res
+
+def parse_editor_name_to_apa(raw_name: str) -> str:
+    """Wandelt einen Herausgebernamen in das Format Initialen Nachname nach APA 7 um."""
+    apa_last_init = parse_author_name_to_apa(raw_name)
+    if "," in apa_last_init:
+        parts = [p.strip() for p in apa_last_init.split(",", 1)]
+        return f"{parts[1]} {parts[0]}".strip()
+    return apa_last_init
+
+def format_editors_apa(editors_list: list, is_en: bool = False) -> str:
+    """Formatiert eine Liste von Herausgebern standardkonform nach APA 7 (Initialen Nachname (Hrsg.) bzw. (Eds.))."""
+    cleaned = []
+    for ed in editors_list:
+        p = parse_editor_name_to_apa(ed)
+        if p and p not in cleaned:
+            cleaned.append(p)
+    if not cleaned:
+        return ""
+    if len(cleaned) == 1:
+        ed_str = cleaned[0]
+        label = "Ed." if is_en else "Hrsg."
+    elif len(cleaned) <= 20:
+        ed_str = ", ".join(cleaned[:-1]) + " & " + cleaned[-1]
+        label = "Eds." if is_en else "Hrsg."
+    else:
+        ed_str = ", ".join(cleaned[:19]) + ", ... " + cleaned[-1]
+        label = "Eds." if is_en else "Hrsg."
+    return f"{ed_str} ({label})"
 
 def clean_url_string(raw_u: str) -> str:
     """Bereinigt URLs unter Beibehaltung balancierter Klammern in DOIs und Pfaden."""
@@ -635,6 +697,146 @@ def fetch_doi_metadata_resilient(doi_str: str, clean_url: str) -> Optional[Dict[
 
     return None
 
+
+def fetch_isbn_metadata_resilient(isbn_str: str) -> Optional[Dict[str, any]]:
+    """Fragt Metadaten zu einer ISBN über Open Library und Lobid (DNB) resilient ab."""
+    c_isbn = clean_isbn(isbn_str)
+    if not c_isbn:
+        return None
+
+    cache_key = f"isbn:{c_isbn}"
+    cache = load_citation_cache()
+    if cache_key in cache:
+        cached = cache[cache_key]
+        if cached.get("title") and not is_invalid_title(cached.get("title")):
+            return cached
+
+    title = ""
+    authors = []
+    year = ""
+    publisher = ""
+
+    # Stufe 1: Open Library Books API
+    try:
+        url = f"https://openlibrary.org/isbn/{c_isbn}.json"
+        req = urllib.request.Request(url, headers={"User-Agent": "Antigravity/1.0 (mailto:jonathanklatchko@gmail.com)"})
+        with urllib.request.urlopen(req, timeout=3.5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            title = data.get("title", "")
+            if data.get("subtitle"):
+                title = f"{title}: {data[subtitle]}"
+            publishers = data.get("publishers", [])
+            publisher = publishers[0] if publishers else ""
+            publish_date = data.get("publish_date", "")
+            m_yr = re.search(r"\b(19\d{2}|20\d{2})\b", str(publish_date))
+            if m_yr:
+                year = m_yr.group(1)
+            
+            author_entries = data.get("authors", [])
+            for a_ent in author_entries:
+                a_key = a_ent.get("key")
+                if a_key:
+                    try:
+                        a_url = f"https://openlibrary.org{a_key}.json"
+                        req_a = urllib.request.Request(a_url, headers={"User-Agent": "Antigravity/1.0"})
+                        with urllib.request.urlopen(req_a, timeout=2.5) as a_resp:
+                            a_data = json.loads(a_resp.read().decode("utf-8"))
+                            if a_data.get("name"):
+                                authors.append(a_data["name"])
+                    except Exception:
+                        pass
+            
+            if not authors and data.get("works"):
+                w_key = data["works"][0].get("key")
+                if w_key:
+                    try:
+                        w_url = f"https://openlibrary.org{w_key}.json"
+                        req_w = urllib.request.Request(w_url, headers={"User-Agent": "Antigravity/1.0"})
+                        with urllib.request.urlopen(req_w, timeout=2.5) as w_resp:
+                            w_data = json.loads(w_resp.read().decode("utf-8"))
+                            for wa in w_data.get("authors", []):
+                                wa_author = wa.get("author", {})
+                                if wa_author.get("key"):
+                                    a_url = f"https://openlibrary.org{wa_author[key]}.json"
+                                    req_a = urllib.request.Request(a_url, headers={"User-Agent": "Antigravity/1.0"})
+                                    with urllib.request.urlopen(req_a, timeout=2.5) as a_resp:
+                                        a_data = json.loads(a_resp.read().decode("utf-8"))
+                                        if a_data.get("name"):
+                                            authors.append(a_data["name"])
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
+    # Stufe 2: Open Library Search zur Ergänzung
+    if not authors or not publisher or not year or not title:
+        try:
+            url = f"https://openlibrary.org/search.json?isbn={c_isbn}&limit=1"
+            req = urllib.request.Request(url, headers={"User-Agent": "Antigravity/1.0 (mailto:jonathanklatchko@gmail.com)"})
+            with urllib.request.urlopen(req, timeout=3.5) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                docs = data.get("docs", [])
+                if docs:
+                    d = docs[0]
+                    if not title:
+                        title = d.get("title", "")
+                    if not authors:
+                        authors = d.get("author_name", [])
+                    if not year:
+                        year = str(d.get("first_publish_year") or "")
+                    if not publisher:
+                        pubs = d.get("publisher", [])
+                        publisher = pubs[0] if pubs else ""
+        except Exception:
+            pass
+
+    # Stufe 3: Lobid DNB Fallback
+    if not title or not authors:
+        try:
+            url = f"https://lobid.org/resources/{c_isbn}.json"
+            req = urllib.request.Request(url, headers={"User-Agent": "Antigravity/1.0 (mailto:jonathanklatchko@gmail.com)"})
+            with urllib.request.urlopen(req, timeout=3.5) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                if not title:
+                    title = data.get("title", "")
+                if not year:
+                    pub_ev = data.get("publication", [])
+                    if pub_ev and isinstance(pub_ev, list):
+                        ev0 = pub_ev[0]
+                        yr_val = ev0.get("startDate") or ev0.get("dateStatement") or ""
+                        m_yr = re.search(r"\b(19\d{2}|20\d{2})\b", str(yr_val))
+                        if m_yr:
+                            year = m_yr.group(1)
+                        if not publisher:
+                            pubs = ev0.get("publishedBy", [])
+                            publisher = pubs[0] if pubs else (ev0.get("location")[0] if ev0.get("location") else "")
+                if not authors:
+                    contribs = data.get("contribution", [])
+                    for c in contribs:
+                        ag = c.get("agent", {})
+                        if ag.get("label"):
+                            authors.append(ag["label"])
+        except Exception:
+            pass
+
+    if title and not is_invalid_title(title):
+        auth_str = format_authors_apa(authors) if authors else ""
+        res_meta = {
+            "type": "book",
+            "author": auth_str if not is_invalid_author(auth_str) else "",
+            "year": year,
+            "title": title,
+            "publisher": publisher,
+            "source": publisher,
+            "isbn": c_isbn,
+            "url": ""
+        }
+        cache[cache_key] = res_meta
+        save_citation_cache(cache)
+        return res_meta
+
+    return None
+
 def investigate_link(url: str) -> Optional[Dict[str, str]]:
     """Untersucht einen vorliegenden Link (DOI oder URL) und extrahiert normierte Metadaten für das APA-Format."""
     clean_url = clean_url_string(url)
@@ -920,12 +1122,11 @@ def find_author_in_context(raw_citation: str, clean_url: str, link_meta: dict, c
     return None
 
 def format_citation_to_apa_7(raw_citation: str, context_text: str = "") -> Dict[str, str]:
-    """Wandelt einen Zitationseintrag oder eine URL unter Untersuchung des Links verbindlich in das APA-7-Format um."""
+    """Wandelt einen Zitationseintrag, ein Buch, ein Buchkapitel, eine ISBN oder eine URL verbindlich in das APA-7-Format um."""
     clean_raw = raw_citation.strip()
     if not clean_raw:
         return {}
 
-    # Header-Fragmente und isolierte Verzeichnis-Begriffe verwerfen
     bib_header_check = re.compile(
         r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library|Verzeichnis)\b:?\s*$",
         re.IGNORECASE
@@ -933,14 +1134,157 @@ def format_citation_to_apa_7(raw_citation: str, context_text: str = "") -> Dict[
     if bib_header_check.match(clean_raw):
         return {}
 
-    m_url = re.search(r'https?://[^\s<>"\'\[\]]+', clean_raw)
-    url = m_url.group(0).rstrip('.,;:)"\'') if m_url else ""
+    is_en_doc = False
+    if context_text:
+        en_words = {"the", "and", "in", "of", "to", "with", "is", "for", "references"}
+        ctx_tokens = set(re.findall(r"\b[a-z]+\b", context_text.lower()))
+        if len(ctx_tokens.intersection(en_words)) >= 4:
+            is_en_doc = True
+
+    # 1. Direkte ISBN-Erkennung
+    isbns_found = extract_isbns_from_text(clean_raw)
+    if isbns_found:
+        first_isbn = isbns_found[0]
+        isbn_meta = fetch_isbn_metadata_resilient(first_isbn)
+        if isbn_meta:
+            author_val = isbn_meta.get("author") or ("N. A." if is_en_doc else "O. A.")
+            year_val = isbn_meta.get("year") or ("n.d." if is_en_doc else "o. D.")
+            title_val = isbn_meta.get("title") or ("Untitled" if is_en_doc else "Ohne Titel")
+            pub_val = isbn_meta.get("publisher", "")
+
+            m_extra_p = re.search(r"(?:(?:Kap\.|Kapitel|Chapter|Chap\.)\s*([0-9IVXLCDM]+|[A-Z])\b|(?:S\.|pp?\.)\s*(\d+(?:[-–—]\d+)?))", clean_raw, re.I)
+            extra_suffix = ""
+            if m_extra_p:
+                extra_suffix = f" ({m_extra_p.group(0).strip()})"
+
+            auth_part = escape_typst_line(author_val)
+            if not auth_part.endswith("."):
+                auth_part += "."
+            date_part = f"({year_val})."
+            clean_title = re.sub(r"^_*([^_]+)_*$", r"\1", title_val).strip().rstrip(".")
+            title_part = f"_{escape_typst_line(clean_title)}_{escape_typst_line(extra_suffix)}."
+            pub_part = f" {escape_typst_line(pub_val)}." if pub_val else ""
+
+            formatted = f"{auth_part} {date_part} {title_part}{pub_part}".strip()
+            return {
+                "sort_key": author_val.lower(),
+                "formatted": formatted,
+                "clean_url": f"isbn:{first_isbn}",
+                "title_key": re.sub(r"[^a-z0-9]", "", title_val.lower()) if title_val else ""
+            }
+
+    # 2. Strukturierte Buchkapitel- und Sammelband-Erkennung
+    m_chap_ed = re.match(
+        r"^(?P<author>.+?)\s*[\(\[](?P<year>[12]\d{3}[^\)\]]*)[\)\]][\.:]?\s*(?P<chapter>.+?)\.\s+[iI]n\s+(?P<editor>.+?)\s*[\(\[](?P<ed_label>Hrsg\.|Ed\.|Eds\.|Hg\.)[\)\]],?\s*(?P<book>.+?)(?:\s*[\(\[](?:(?:S\.|pp?\.)\s*)?(?P<pages>\d+(?:[-–—]\d+)?)[\]\)])?\.\s*(?P<publisher>.+)$",
+        clean_raw
+    )
+    if m_chap_ed:
+        d = m_chap_ed.groupdict()
+        auth_apa = parse_author_name_to_apa(d["author"]) or d["author"].strip()
+        auth_part = escape_typst_line(auth_apa)
+        if not auth_part.endswith("."):
+            auth_part += "."
+        date_part = f"({d['year'].strip()})."
+        chap_part = escape_typst_line(d["chapter"].strip().rstrip(".")) + "."
+        ed_str = d["editor"].strip()
+        ed_lbl = d.get("ed_label") or ("Ed." if is_en_doc else "Hrsg.")
+        in_part = f"In {escape_typst_line(ed_str)} ({escape_typst_line(ed_lbl)}),"
+        book_clean = re.sub(r"^_*([^_]+)_*$", r"\1", d["book"]).strip().rstrip(".")
+        pages_str = d.get("pages")
+        page_prefix = "pp. " if is_en_doc else "S. "
+        page_clause = f" ({page_prefix}{pages_str})" if pages_str else ""
+        book_part = f"_{escape_typst_line(book_clean)}_{escape_typst_line(page_clause)}."
+        pub_part = f" {escape_typst_line(d['publisher'].strip().rstrip('.'))}."
+        formatted = f"{auth_part} {date_part} {chap_part} {in_part} {book_part}{pub_part}".strip()
+        return {
+            "sort_key": auth_apa.lower(),
+            "formatted": formatted,
+            "clean_url": "",
+            "title_key": re.sub(r"[^a-z0-9]", "", d["chapter"].lower())
+        }
+
+    m_chap_no_ed = re.match(
+        r"^(?P<author>.+?)\s*[\(\[](?P<year>[12]\d{3}[^\)\]]*)[\)\]][\.:]?\s*(?P<chapter>.+?)\.\s+[iI]n\s+(?P<book>.+?)(?:\\s*[\(\[](?:(?:S\.|pp?\.)\s*)?(?P<pages>\d+(?:[-–—]\d+)?)[\]\)])\.\s*(?P<publisher>.+)$",
+        clean_raw
+    )
+    if m_chap_no_ed:
+        d = m_chap_no_ed.groupdict()
+        auth_apa = parse_author_name_to_apa(d["author"]) or d["author"].strip()
+        auth_part = escape_typst_line(auth_apa)
+        if not auth_part.endswith("."):
+            auth_part += "."
+        date_part = f"({d['year'].strip()})."
+        chap_part = escape_typst_line(d["chapter"].strip().rstrip(".")) + "."
+        book_clean = re.sub(r"^_*([^_]+)_*$", r"\1", d["book"]).strip().rstrip(".")
+        pages_str = d.get("pages")
+        page_prefix = "pp. " if is_en_doc else "S. "
+        page_clause = f" ({page_prefix}{pages_str})" if pages_str else ""
+        book_part = f"In _{escape_typst_line(book_clean)}_{escape_typst_line(page_clause)}."
+        pub_part = f" {escape_typst_line(d['publisher'].strip().rstrip('.'))}."
+        formatted = f"{auth_part} {date_part} {chap_part} {book_part}{pub_part}".strip()
+        return {
+            "sort_key": auth_apa.lower(),
+            "formatted": formatted,
+            "clean_url": "",
+            "title_key": re.sub(r"[^a-z0-9]", "", d["chapter"].lower())
+        }
+
+    # 3. Monografie / Buch mit Auflage/Band
+    m_book_ed = re.match(
+        r"^(?P<author>.+?)\s*[\(\[](?P<year>[12]\d{3}[^\)\]]*)[\)\]][\.:]?\s*(?P<book>.+?)\s*[\(\[](?:(?P<edition>(?:\d+\.?\s*(?:Aufl\.|ed\.|Ausg\.)|Bd\.\s*\d+|Vol\.\s*\d+)[^()\]]*)|(?:S\.|pp?\.)\s*(?P<pages>\d+(?:[-–—]\d+)?))[\]\)][\.:]?\s*(?P<publisher>.+)$",
+        clean_raw
+    )
+    if m_book_ed and not m_book_ed.group("book").lower().startswith("http"):
+        d = m_book_ed.groupdict()
+        auth_apa = parse_author_name_to_apa(d["author"]) or d["author"].strip()
+        auth_part = escape_typst_line(auth_apa)
+        if not auth_part.endswith("."):
+            auth_part += "."
+        date_part = f"({d['year'].strip()})."
+        book_clean = re.sub(r"^_*([^_]+)_*$", r"\1", d["book"]).strip().rstrip(".")
+        ed_val = d.get("edition") or (f"S. {d['pages']}" if d.get("pages") else "")
+        ed_clause = f" ({ed_val.strip()})" if ed_val else ""
+        book_part = f"_{escape_typst_line(book_clean)}_{escape_typst_line(ed_clause)}."
+        pub_part = f" {escape_typst_line(d['publisher'].strip().rstrip('.'))}."
+        formatted = f"{auth_part} {date_part} {book_part}{pub_part}".strip()
+        return {
+            "sort_key": auth_apa.lower(),
+            "formatted": formatted,
+            "clean_url": "",
+            "title_key": re.sub(r"[^a-z0-9]", "", d["book"].lower())
+        }
+
+    # 4. Standard-Buch: Autor (Jahr). Buchtitel. Verlag.
+    m_cite_book = re.match(r"^(?P<author>.+?)\s*[\(\[](?P<year>[12]\d{3}[^\)\]]*)[\)\]][\.:]?\s*(?P<rest>.+)$", clean_raw)
+    if m_cite_book and "http" not in clean_raw and not clean_raw.startswith("http"):
+        rest_txt = m_cite_book.group("rest").strip().rstrip(".")
+        parts = re.split(r"(?<!\b[A-ZÄÖÜ])\.\s+(?=[A-ZÄÖÜ])", rest_txt)
+        if len(parts) == 2:
+            auth_apa = parse_author_name_to_apa(m_cite_book.group("author")) or m_cite_book.group("author").strip()
+            auth_part = escape_typst_line(auth_apa)
+            if not auth_part.endswith("."):
+                auth_part += "."
+            date_part = f"({m_cite_book.group('year').strip()})."
+            book_clean = re.sub(r"^_*([^_]+)_*$", r"\1", parts[0]).strip().rstrip(".")
+            book_part = f"_{escape_typst_line(book_clean)}._"
+            pub_part = f" {escape_typst_line(parts[1].strip().rstrip('.'))}."
+            formatted = f"{auth_part} {date_part} {book_part}{pub_part}".strip()
+            return {
+                "sort_key": auth_apa.lower(),
+                "formatted": formatted,
+                "clean_url": "",
+                "title_key": re.sub(r"[^a-z0-9]", "", parts[0].lower())
+            }
+
+    # 5. Reguläre URL- / DOI-Verarbeitung
+    m_url = re.search(r"https?://[^\s<>\"\'\[\]]+", clean_raw)
+    url = m_url.group(0).rstrip(".,;:)\"\'") if m_url else ""
     clean_url = clean_url_string(url) if url else ""
 
     link_meta = investigate_link(clean_url) if clean_url else None
 
     # Textbestandteil ohne URL bereinigen
-    text_no_url = re.sub(r'https?://[^\s<>"\'\[\]]+', '', clean_raw).strip().rstrip('.,;:')
+    text_no_url = re.sub(r"https?://[^\s<>\"\'\[\]]+", "", clean_raw).strip().rstrip(".,;:")
 
     if bib_header_check.match(text_no_url):
         return {}
@@ -950,7 +1294,7 @@ def format_citation_to_apa_7(raw_citation: str, context_text: str = "") -> Dict[
     title = ""
     source = ""
 
-    m_cite = re.match(r'^(.*?)\s*[\(\[]([12]\d{3}[^\)\]]*)[\)\]][\.:]?\s*(.*)$', text_no_url)
+    m_cite = re.match(r"^(.*?)\s*[\(\[]([12]\d{3}[^\)\]]*)[\)\]][\.:]?\s*(.*)$", text_no_url)
 
     # Ohne URL und ohne Zitationsformat muss der Text substantielle Informationen enthalten
     if not clean_url and not m_cite:
@@ -958,17 +1302,17 @@ def format_citation_to_apa_7(raw_citation: str, context_text: str = "") -> Dict[
             return {}
 
     if m_cite:
-        author = m_cite.group(1).strip().rstrip('.,;:')
+        author = m_cite.group(1).strip().rstrip(".,;:")
         date_str = m_cite.group(2).strip()
-        rest = m_cite.group(3).strip().rstrip('.,;:')
+        rest = m_cite.group(3).strip().rstrip(".,;:")
 
         # Zerlegung von rest in Titel und optionale Quelle (z. B. "Titel des Berichts. McKinsey & Company")
-        parts = re.split(r'\.\s+(?=[A-ZÄÖÜ])', rest)
+        parts = re.split(r"\.\s+(?=[A-ZÄÖÜ])", rest)
         if len(parts) > 1 and len(parts[-1]) <= 70:
-            title = '. '.join(parts[:-1]).strip().rstrip('.,;:')
-            source = parts[-1].strip().rstrip('.,;:')
+            title = ". ".join(parts[:-1]).strip().rstrip(".,;:")
+            source = parts[-1].strip().rstrip(".,;:")
         else:
-            title = rest.strip().rstrip('.,;:')
+            title = rest.strip().rstrip(".,;:")
 
     # Abgleich mit den Metadaten aus der Link-Untersuchung
     if link_meta:
@@ -988,13 +1332,6 @@ def format_citation_to_apa_7(raw_citation: str, context_text: str = "") -> Dict[
         ctx_date = find_date_in_context(clean_raw, clean_url, link_meta, context_text)
         if ctx_date:
             date_str = ctx_date
-
-    is_en_doc = False
-    if context_text:
-        en_words = {"the", "and", "in", "of", "to", "with", "is", "for", "references"}
-        ctx_tokens = set(re.findall(r"\b[a-z]+\b", context_text.lower()))
-        if len(ctx_tokens.intersection(en_words)) >= 4:
-            is_en_doc = True
 
     if is_invalid_author(author):
         author = ""
@@ -1020,7 +1357,7 @@ def format_citation_to_apa_7(raw_citation: str, context_text: str = "") -> Dict[
 
     date_part = f"({date_str})."
 
-    clean_title = re.sub(r'^_*(.*?)_*$', r'\1', title).strip().rstrip('.')
+    clean_title = re.sub(r"^_*([^_]+)_*$", r"\1", title).strip().rstrip(".")
     title_part = f"_{escape_typst_line(clean_title)}._"
 
     source_part = f" {escape_typst_line(source)}." if source and source.lower() != author.lower() else ""
@@ -1033,6 +1370,7 @@ def format_citation_to_apa_7(raw_citation: str, context_text: str = "") -> Dict[
         "clean_url": clean_url,
         "title_key": re.sub(r"[^a-z0-9]", "", title.lower()) if title else ""
     }
+
 
 def resolve_apa_citation(url: str, context_text: str = "") -> Dict[str, str]:
     """Kompatibilitäts-Wrapper: Löst eine URL oder einen DOI in einen standardkonformen APA-7-Zitationseintrag auf."""
