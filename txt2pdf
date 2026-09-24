@@ -126,12 +126,20 @@ def format_content_to_typst(text: str) -> str:
 def convert_markdown_formatting_to_typst(text: str) -> str:
     return format_content_to_typst(text)
 
-def apply_initial_to_typst_element(content: str) -> str:
-    """Wendet ein typografisches 3-Zeilen-Initial (Drop Cap) via droplet auf den Beginn eines Typst-Fließtextblocks an."""
+def apply_initial_to_typst_element(content: str, font_spec: str = None) -> str:
+    """Wendet ein typografisches großes Initial (Drop Cap) via droplet mit der Titelschriftart auf den Beginn eines Typst-Fließtextblocks an."""
     s = content.strip()
     if not s or s.startswith("#dropcap") or s.startswith("#table") or s.startswith("- ") or s.startswith("#grid") or s.startswith("#align"):
         return s
-    return f"#dropcap(\n  height: 3,\n  gap: 2pt,\n  justify: true,\n)[{s}]"
+    initial_font = font_spec if font_spec else FONT_DEFINITIONS["didot"]["spec"]
+    return (
+        f"#dropcap(\n"
+        f"  height: 4,\n"
+        f"  gap: 3pt,\n"
+        f"  justify: true,\n"
+        f"  transform: it => text(font: {initial_font}, weight: \"bold\", it)\n"
+        f")[{s}]"
+    )
 
 def is_heading_sentence(text: str) -> bool:
     """Erkennt deterministisch, ob ein Absatz aus einem einzelnen Satz oder einer kurzen Phrase (mit oder ohne Punkt) als Überschrift besteht."""
@@ -1297,7 +1305,7 @@ def format_figure_typst(img_path: str, caption_title: str = "", source: str = ""
         f"]\n#v(2.5mm)\n"
     )
 
-def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str = "6pt", use_initial: bool = True, doc_dir: str = "", hanging_indent: str = "6mm") -> Tuple[str, List[str], List[str], str]:
+def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str = "6pt", use_initial: bool = True, doc_dir: str = "", hanging_indent: str = "6mm", title_font_spec: str = None) -> Tuple[str, List[str], List[str], str]:
     """Wandelt Textzeilen in Typst-Code um, verarbeitet Überschriften, trennt APA-Zitate für die Extraseite und extrahiert Links."""
     full_raw_text = "\n".join(raw_lines)
     all_urls = extract_urls_from_text(full_raw_text)
@@ -1646,7 +1654,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         escaped_para = format_content_to_typst(flat_text)
         top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
         if use_initial and not first_body_para_done:
-            escaped_para = apply_initial_to_typst_element(escaped_para)
+            escaped_para = apply_initial_to_typst_element(escaped_para, font_spec=title_font_spec)
             if top_v:
                 escaped_para = f"{top_v}{escaped_para}"
         else:
@@ -2070,7 +2078,7 @@ def parse_rtf_to_typst(
             typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #strong[{inner_c}]\n  ]\n]\n")
         else:
             if use_initial and not first_body_para_done:
-                content_init = apply_initial_to_typst_element(content)
+                content_init = apply_initial_to_typst_element(content, font_spec=title_font_spec)
                 if top_v:
                     content_init = f"{top_v}{content_init}"
                 typst_blocks.append(content_init)
@@ -2741,7 +2749,7 @@ def convert_txt_to_pdf(
             body_lines = translated_body
 
         body_text, urls, explicit_bib_entries, bib_heading_title = parse_body_to_typst(
-            body_lines, images=images, caption_size=caption_size, use_initial=final_initial, doc_dir=doc_dir, hanging_indent=hanging_indent
+            body_lines, images=images, caption_size=caption_size, use_initial=final_initial, doc_dir=doc_dir, hanging_indent=hanging_indent, title_font_spec=title_font_spec
         )
 
     if is_rtf:
