@@ -2828,27 +2828,43 @@ def convert_txt_to_pdf(
         if fmt == "atk2":
             author_font_spec = FONT_DEFINITIONS["didot"]["spec"]
             author_part = f'\n        #v(5.0mm)\n        #block[#text(font: {author_font_spec}, style: "normal", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(doc_author)}]]' if doc_author else ""
-        else:
+            date_part = f'\n        #v(1.0mm)\n        #block[#text(size: 8pt, fill: rgb("#000000"))[{escape_typst_line(doc_date)}]]' if doc_date else ""
+            top_header_box = f"""// Vollbreite-Titelbox mit Trennlinie (atk2: Didot maximal dynamisch, einzeilig, zentriert)
+#place(top, scope: "parent", float: true)[
+  #block(width: 100%, inset: (bottom: 2.5mm))[
+    #context {{
+      let max-w = 178mm
+      let low = 10.0
+      let high = 120.0
+      for _ in range(16) {{
+        let mid = (low + high) / 2.0
+        let m = measure(text(font: {title_font_spec}, size: mid * 1pt, weight: "bold")[#strong[{escape_typst_line(doc_title)}]])
+        if m.width <= max-w {{
+          low = mid
+        }} else {{
+          high = mid
+        }}
+      }}
+      let best-sz = low * 1pt
+      align(center)[
+        #block[#text(font: {title_font_spec}, size: best-sz, weight: "bold", fill: rgb("#000000"))[#strong[{escape_typst_line(doc_title)}]]]{author_part}{date_part}
+      ]
+    }}
+    #v(1.8mm)
+    #line(length: 100%, stroke: 0.5pt + rgb("#000000"))
+  ]
+]
+"""
+        else:  # atk1
             author_part = f'\n        #v(1.4mm)\n        #block[#text(style: "italic", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(doc_author)}]]' if doc_author else ""
-        date_part = f'\n        #v(1.0mm)\n        #block[#text(size: 8pt, fill: rgb("#000000"))[{escape_typst_line(doc_date)}]]' if doc_date else ""
-        header_content = f"""#align(center)[
+            date_part = f'\n        #v(1.0mm)\n        #block[#text(size: 8pt, fill: rgb("#000000"))[{escape_typst_line(doc_date)}]]' if doc_date else ""
+            header_content = f"""#align(center)[
       #block[#text(font: {title_font_spec}, size: {title_size}, weight: "bold", fill: rgb("#000000"))[#strong[{escape_typst_line(doc_title)}]]]{author_part}{date_part}
     ]"""
-        if fmt == "atk1":
             top_header_box = f"""// Vollbreite-Titelbox ohne Trennlinie (atk1: 10pt größer als Text)
 #place(top, scope: "parent", float: true)[
   #block(width: 100%, inset: (bottom: 1.5mm))[
     {header_content}
-  ]
-]
-"""
-        else:  # atk2
-            top_header_box = f"""// Vollbreite-Titelbox mit Trennlinie (atk2: Didot 36pt, zentriert)
-#place(top, scope: "parent", float: true)[
-  #block(width: 100%, inset: (bottom: 2.5mm))[
-    {header_content}
-    #v(1.8mm)
-    #line(length: 100%, stroke: 0.5pt + rgb("#000000"))
   ]
 ]
 """
