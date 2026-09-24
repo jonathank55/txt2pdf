@@ -2802,8 +2802,8 @@ def convert_txt_to_pdf(
                 else:
                     content_w_val = 178
 
-    # Begrenzung der Titelbreite auf exakt 75% der Satzspiegelbreite (Textbreite)
-    max_title_w_val = round(content_w_val * 0.75, 1)
+    # Begrenzung der Titelbreite auf exakt 85% der Satzspiegelbreite (Textbreite)
+    max_title_w_val = round(content_w_val * 0.85, 1)
 
     effective_lang = target_lang.lower().strip() if target_lang else lang
     if not target_lang and lang == "de" and 'raw_content' in locals() and raw_content:
