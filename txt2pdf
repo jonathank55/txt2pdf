@@ -1103,10 +1103,8 @@ def resolve_font_spec(font_arg: str = None, fmt: str = "br2") -> Tuple[str, str]
                 return FONT_DEFINITIONS[cleaned]["spec"], FONT_DEFINITIONS[cleaned]["name"]
             return f'("{font_arg.strip()}", "Optima", "PT Serif", "Times New Roman")', font_arg.strip()
 
-    if fmt in ("atk2", "atk"):
+    if fmt == "atk":
         return FONT_DEFINITIONS["garamond"]["spec"], "Garamond"
-    elif fmt == "atk1":
-        return FONT_DEFINITIONS["big caslon"]["spec"], "Big Caslon"
     elif fmt in ("br2", "br1"):
         return FONT_DEFINITIONS["pt serif"]["spec"], "PT Serif"
     elif fmt == "apa":
@@ -1116,7 +1114,7 @@ def resolve_font_spec(font_arg: str = None, fmt: str = "br2") -> Tuple[str, str]
 
 def resolve_title_font_spec(fmt: str, body_font_spec: str) -> str:
     """Löst die typografische Schriftartenspezifikation für die Hauptüberschrift (Titel) auf."""
-    if fmt == "atk2":
+    if fmt == "atk":
         return FONT_DEFINITIONS["didot"]["spec"]
     return body_font_spec
 
@@ -2610,14 +2608,10 @@ def convert_txt_to_pdf(
 
     os.makedirs(os.path.dirname(abs_output), exist_ok=True)
 
-    # Format-Profil auflösen (-f atk1 | atk2 | atk | br2 | br1 | apa; Standard: atk2)
-    fmt_raw = (format_preset or "atk2").lower().strip()
-    if fmt_raw in ("atk1", "artikel1"):
-        fmt = "atk1"
-    elif fmt_raw in ("atk2", "artikel2"):
-        fmt = "atk2"
-    elif fmt_raw in ("atk", "artikel"):
-        fmt = "atk2"  # atk als Alias für atk2
+    # Format-Profil auflösen (-f atk | br2 | br1 | apa; Standard: atk)
+    fmt_raw = (format_preset or "atk").lower().strip()
+    if fmt_raw in ("atk", "artikel", "atk2", "atk1", "artikel1", "artikel2"):
+        fmt = "atk"
     elif fmt_raw in ("br1", "bericht1"):
         fmt = "br1"
     elif fmt_raw == "apa":
@@ -2655,13 +2649,7 @@ def convert_txt_to_pdf(
             open_preview=open_preview
         )
 
-    if fmt == "atk1":
-        final_columns = columns if columns is not None else 3
-        final_initial = use_initial if use_initial is not None else True
-        final_gutter = gutter if gutter is not None else "4.8mm"
-        final_font_size = font_size if font_size is not None else "9pt"
-        default_leading = "0.35em"
-    elif fmt == "atk2":
+    if fmt == "atk":
         final_columns = columns if columns is not None else 3
         final_initial = use_initial if use_initial is not None else True
         final_gutter = gutter if gutter is not None else "4.8mm"
@@ -2702,15 +2690,13 @@ def convert_txt_to_pdf(
     is_rtfd = abs_input.lower().endswith(".rtfd")
     is_rtf = is_rtfd or abs_input.lower().endswith(".rtf")
 
-    # Dynamische Schriftgrößen: 6pt bis 12pt (Hauptüberschrift bei atk2: 36pt, bei atk1: +10pt, sonst +6pt, Bildunterschriften -2pt)
+    # Dynamische Schriftgrößen: 6pt bis 12pt (Hauptüberschrift bei atk: 36pt, sonst +6pt, Bildunterschriften -2pt)
     m = re.search(r"([\d.]+)", str(final_font_size))
-    raw_pt = float(m.group(1)) if m else (10.0 if fmt in ("atk2", "atk") else (9.0 if fmt == "atk1" else 12.0))
+    raw_pt = float(m.group(1)) if m else (10.0 if fmt == "atk" else 12.0)
     base_pt = max(6.0, min(raw_pt, 12.0))
     final_font_size = f"{base_pt:g}pt"
-    if fmt == "atk2":
+    if fmt == "atk":
         title_size = "36pt"
-    elif fmt == "atk1":
-        title_size = f"{base_pt + 10.0:g}pt"
     else:
         title_size = f"{base_pt + 6.0:g}pt"
     caption_size = f"{max(base_pt - 2.0, 3.0):g}pt"
@@ -2810,8 +2796,8 @@ def convert_txt_to_pdf(
         doc_title, doc_author = clean_title_and_author(raw_title, target_author, fallback_author=file_author_candidate)
 
     # Ränder-Auflösung (-r k | m | g bzw. klein | mittel | groß)
-    # Standard: 'k' (klein) bei atk2, 'm' (mittel) bei atk1, br2, br1; entfällt bei APA (25.4mm)
-    if fmt == "atk2":
+    # Standard: 'k' (klein) bei atk, 'm' (mittel) bei br2, br1; entfällt bei APA (25.4mm)
+    if fmt == "atk":
         default_margin_x = "10mm"
         default_margin_y = "12mm"
         default_content_w = 190
@@ -2886,12 +2872,11 @@ def convert_txt_to_pdf(
 
     columns_directive = f"#set columns(gutter: {final_gutter})\n" if final_columns > 1 else ""
 
-    if fmt in ("atk1", "atk2"):
-        if fmt == "atk2":
-            author_font_spec = FONT_DEFINITIONS["didot"]["spec"]
-            author_part = f'\n        #v(6.5mm)\n        #block[#text(font: {author_font_spec}, style: "normal", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(doc_author)}]]' if doc_author else ""
-            date_part = f'\n        #v(1.0mm)\n        #block[#text(size: 8pt, fill: rgb("#000000"))[{escape_typst_line(doc_date)}]]' if doc_date else ""
-            top_header_box = f"""// Vollbreite-Titelbox mit Trennlinie (atk2: Didot maximal dynamisch, einzeilig, zentriert)
+    if fmt == "atk":
+        author_font_spec = FONT_DEFINITIONS["didot"]["spec"]
+        author_part = f'\n        #v(6.5mm)\n        #block[#text(font: {author_font_spec}, style: "normal", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(doc_author)}]]' if doc_author else ""
+        date_part = f'\n        #v(1.0mm)\n        #block[#text(size: 8pt, fill: rgb("#000000"))[{escape_typst_line(doc_date)}]]' if doc_date else ""
+        top_header_box = f"""// Vollbreite-Titelbox mit Trennlinie (atk: Didot maximal dynamisch, einzeilig, zentriert)
 #place(top, scope: "parent", float: true)[
   #block(width: 100%, inset: (bottom: 2.5mm))[
     #context {{
@@ -2914,19 +2899,6 @@ def convert_txt_to_pdf(
     }}
     #v(1.8mm)
     #line(length: 100%, stroke: 0.5pt + rgb("#000000"))
-  ]
-]
-"""
-        else:  # atk1
-            author_part = f'\n        #v(1.4mm)\n        #block[#text(style: "italic", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(doc_author)}]]' if doc_author else ""
-            date_part = f'\n        #v(1.0mm)\n        #block[#text(size: 8pt, fill: rgb("#000000"))[{escape_typst_line(doc_date)}]]' if doc_date else ""
-            header_content = f"""#align(center)[
-      #block[#text(font: {title_font_spec}, size: {title_size}, weight: "bold", fill: rgb("#000000"))[#strong[{escape_typst_line(doc_title)}]]]{author_part}{date_part}
-    ]"""
-            top_header_box = f"""// Vollbreite-Titelbox ohne Trennlinie (atk1: 10pt größer als Text)
-#place(top, scope: "parent", float: true)[
-  #block(width: 100%, inset: (bottom: 1.5mm))[
-    {header_content}
   ]
 ]
 """
@@ -3061,15 +3033,14 @@ def main():
     RESET = "\033[0m"
 
     fmt_help = (
-        f"Format: {BLUE}atk2{RESET} (Artikel, 3 Spalten, Garamond, mit Linie, Titel: Didot 36pt zentriert; Standard), "
-        f"{BLUE}atk1{RESET} (Artikel, 3 Spalten, Big Caslon, ohne Linie), "
+        f"Format: {BLUE}atk{RESET} (Artikel, 3 Spalten, Garamond, mit Linie, Titel: Didot 36pt zentriert; Standard), "
         f"{BLUE}br2{RESET} (Bericht, 2 Spalten, PT Serif), "
         f"{BLUE}br1{RESET} (Bericht, 1 Spalte, PT Serif), "
         f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter)"
     )
-    size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 10pt bei atk2, 9pt bei atk1, 12pt bei br2/br1; entfällt bei apa)"
+    size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 10pt bei atk, 12pt bei br2/br1; entfällt bei apa)"
     font_help = f"Schriftart ({BLUE}Garamond{RESET}, {BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, {BLUE}Didot{RESET}, {BLUE}Cochin{RESET}, {BLUE}Big Caslon{RESET}, {BLUE}Baskerville{RESET}, {BLUE}Roboto{RESET}, {BLUE}Monaco{RESET})"
-    margin_help = f"Ränder ({BLUE}k{RESET} (klein; Standard bei atk2), {BLUE}m{RESET} (mittel), {BLUE}g{RESET} (groß); entfällt bei apa)"
+    margin_help = f"Ränder ({BLUE}k{RESET} (klein; Standard bei atk), {BLUE}m{RESET} (mittel), {BLUE}g{RESET} (groß); entfällt bei apa)"
 
     parser = argparse.ArgumentParser(
         prog="txt2pdf",
@@ -3078,7 +3049,7 @@ def main():
         add_help=False
     )
     parser.add_argument("-h", action="help", help="Hilfe anzeigen")
-    parser.add_argument("-f", dest="format_preset", metavar="FORMAT", default="atk2", help=fmt_help)
+    parser.add_argument("-f", dest="format_preset", metavar="FORMAT", default="atk", help=fmt_help)
     parser.add_argument("-z", dest="font_family", metavar="SCHRIFT", default=None, help=font_help)
     parser.add_argument("-s", dest="size", metavar="GRÖßE", default=None, help=size_help)
     parser.add_argument("-r", dest="margins", metavar="RÄNDER", default=None, help=margin_help)
@@ -3111,7 +3082,7 @@ def main():
     final_target_lang = args.target_lang
     final_margins = args.margins
     all_images = args.images or []
-    fmt = (args.format_preset or "atk2").lower().strip()
+    fmt = (args.format_preset or "atk").lower().strip()
     final_font_size = args.size if fmt != "apa" else None
     final_font = args.font_family
 
