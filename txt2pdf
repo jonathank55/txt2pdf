@@ -3032,13 +3032,13 @@ def convert_txt_to_pdf(
         final_initial = use_initial if use_initial is not None else False
         final_gutter = gutter if gutter is not None else "0mm"
         final_font_size = font_size if font_size is not None else "12pt"
-        default_leading = "0.35em"
+        default_leading = "0.42em"
     else:  # br2 (Standard: 2 Spalten, 12pt Textgröße, Optima)
         final_columns = columns if columns is not None else 2
         final_initial = use_initial if use_initial is not None else False
         final_gutter = gutter if gutter is not None else "5.2mm"
         final_font_size = font_size if font_size is not None else "12pt"
-        default_leading = "0.35em"
+        default_leading = "0.42em"
 
     if leading is not None:
         s_lead = str(leading).strip()
