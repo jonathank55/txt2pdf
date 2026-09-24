@@ -3026,7 +3026,7 @@ def convert_txt_to_pdf(
         final_initial = use_initial if use_initial is not None else True
         final_gutter = gutter if gutter is not None else "4.8mm"
         final_font_size = font_size if font_size is not None else "10pt"
-        default_leading = "0.35em"
+        default_leading = "0.42em"
     elif fmt == "br1":
         final_columns = columns if columns is not None else 1
         final_initial = use_initial if use_initial is not None else False
