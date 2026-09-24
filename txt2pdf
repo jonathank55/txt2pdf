@@ -3181,9 +3181,9 @@ def convert_txt_to_pdf(
         default_margin_y = "12mm"
         default_content_w = 190
     elif fmt == "br1":
-        default_margin_x = "28mm"
-        default_margin_y = "30mm"
-        default_content_w = 154
+        default_margin_x = "34mm"
+        default_margin_y = "36mm"
+        default_content_w = 142
     else:
         default_margin_x = "22mm"
         default_margin_y = "24mm"
@@ -3208,9 +3208,9 @@ def convert_txt_to_pdf(
             margin_y = "24mm"
             content_w_val = 166
         elif m_raw in ("r", "riesig", "huge", "giant", "xl", "very large"):
-            margin_x = "28mm"
-            margin_y = "30mm"
-            content_w_val = 154
+            margin_x = "34mm"
+            margin_y = "36mm"
+            content_w_val = 142
         else:
             # Direkte Maßangabe (z. B. 12mm)
             m_custom = re.match(r"^([0-9.]+)(mm|cm|pt|in)$", m_raw)
@@ -3456,7 +3456,7 @@ def main():
     )
     size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 10pt bei atk, 12pt bei br2/br1; entfällt bei apa)"
     font_help = f"Schriftart ({BLUE}Garamond{RESET}, {BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, {BLUE}Didot{RESET}, {BLUE}Cochin{RESET}, {BLUE}Big Caslon{RESET}, {BLUE}Baskerville{RESET}, {BLUE}Faustina{RESET}, {BLUE}Roboto{RESET}, {BLUE}Monaco{RESET})"
-    margin_help = f"Ränder ({BLUE}k{RESET} (klein: 10/12mm; Standard bei atk), {BLUE}m{RESET} (mittel: 16/18mm), {BLUE}g{RESET} (groß: 22/24mm; Standard bei br2), {BLUE}r{RESET} (riesig: 28/30mm; Standard bei br1); entfällt bei apa)"
+    margin_help = f"Ränder ({BLUE}k{RESET} (klein: 10/12mm; Standard bei atk), {BLUE}m{RESET} (mittel: 16/18mm), {BLUE}g{RESET} (groß: 22/24mm; Standard bei br2), {BLUE}r{RESET} (riesig: 34/36mm; Standard bei br1); entfällt bei apa)"
 
     parser = argparse.ArgumentParser(
         prog="txt2pdf",
