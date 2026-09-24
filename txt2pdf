@@ -3343,12 +3343,10 @@ def convert_txt_to_pdf(
       #block[#text(font: {title_font_spec}, size: {title_size}, weight: "bold", fill: rgb("#000000"))[#strong[{escape_typst_line(doc_title)}]]]{author_block}
     ]"""
 
-        top_header_box = f"""// Vollbreite-Titelbox mit Trennlinie (Titel dynamisch: Textgröße + 6pt)
+        top_header_box = f"""// Vollbreite-Titelbox ohne Trennlinie (Titel dynamisch: Textgröße + 6pt)
 #place(top, scope: "parent", float: true)[
   #block(width: 100%, inset: (bottom: 2.5mm))[
     {header_content}
-    #v(1.2mm)
-    #line(length: 100%, stroke: 0.3pt + rgb("#000000"))
   ]
 ]
 """
