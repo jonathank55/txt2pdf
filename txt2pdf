@@ -1558,7 +1558,9 @@ def generate_bibliography_typst(
     title_size: str = "14pt",
     context_text: str = "",
     hanging_indent: str = "12.7mm",
-    leading: str = "0.35em"
+    leading: str = "0.35em",
+    use_body_indent: bool = False,
+    indent_str: str = "3.8mm"
 ) -> str:
     """Erzeugt das standardkonforme APA-Literaturverzeichnis im Blocktext mit vorangestellter Trennlinie, zentrierter Überschrift und synchronisiertem Zeilenabstand."""
     citations = []
@@ -1606,8 +1608,17 @@ def generate_bibliography_typst(
     citations.sort(key=lambda c: c["sort_key"])
 
     entries_typst = []
-    for c in citations:
-        entries_typst.append(f"#block(inset: (bottom: 3.5mm))[\n  {c['formatted']}\n]")
+    if use_body_indent:
+        for idx, c in enumerate(citations):
+            if idx == 0:
+                entries_typst.append(f"#block(inset: (bottom: 0pt))[\n  {c['formatted']}\n]")
+            else:
+                entries_typst.append(f"#block(inset: (bottom: 0pt))[\n  #h({indent_str}){c['formatted']}\n]")
+        par_hanging = "0pt"
+    else:
+        for c in citations:
+            entries_typst.append(f"#block(inset: (bottom: 3.5mm))[\n  {c['formatted']}\n]")
+        par_hanging = hanging_indent
 
     body = "\n".join(entries_typst)
 
@@ -1623,7 +1634,7 @@ def generate_bibliography_typst(
 #show link: set text(fill: rgb("#0b57d0"))
 #set text(font: {font_spec}, size: {font_size}, costs: (hyphenation: 2000%))
 #set par(
-  hanging-indent: {hanging_indent},
+  hanging-indent: {par_hanging},
   leading: {leading},
   spacing: {leading},
   justify: true,
@@ -1656,7 +1667,7 @@ def format_figure_typst(img_path: str, caption_title: str = "", source: str = ""
         f"]\n#v(2.5mm)\n"
     )
 
-def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str = "6pt", use_initial: bool = True, doc_dir: str = "", hanging_indent: str = "6mm", title_font_spec: str = None) -> Tuple[str, List[str], List[str], str]:
+def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str = "6pt", use_initial: bool = True, doc_dir: str = "", hanging_indent: str = "6mm", title_font_spec: str = None) -> Tuple[str, List[str], List[str], str, bool]:
     """Wandelt Textzeilen in Typst-Code um, verarbeitet Überschriften, trennt APA-Zitate für die Extraseite und extrahiert Links."""
     full_raw_text = "\n".join(raw_lines)
     all_urls = extract_urls_from_text(full_raw_text)
@@ -2027,7 +2038,10 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             if os.path.exists(img_p):
                 typst_elements.append(format_figure_typst(img_p, caption_size=caption_size))
 
-    return "\n".join(typst_elements), all_urls, explicit_bib_entries, bib_heading_title
+    # Erkennt, ob der Fließtext primär Einzüge nutzt
+    doc_has_indents = any(p.get("has_indent", False) for p in paragraphs)
+
+    return "\n".join(typst_elements), all_urls, explicit_bib_entries, bib_heading_title, doc_has_indents
 
 DATE_PATTERNS = [
     r"^(?:Datum|Date):\s*(.+)$",
@@ -2284,7 +2298,7 @@ def parse_rtf_to_typst(
     hanging_indent: str = "6mm",
     title_font_spec: str = '("PT Serif", "EB Garamond", "Times New Roman")',
     fmt: str = "br2"
-) -> Tuple[str, List[str], str, str, str, List[str], str]:
+) -> Tuple[str, List[str], str, str, str, List[str], str, bool]:
     """Konvertiert eine RTF- oder RTFD-Datei via textutil deterministisch unter vollständiger Wahrung der Formatierung."""
     res = subprocess.run(
         ["/usr/bin/textutil", "-convert", "html", rtf_path, "-stdout"],
@@ -2452,6 +2466,8 @@ def parse_rtf_to_typst(
             if os.path.exists(img_p):
                 typst_blocks.append(format_figure_typst(img_p, caption_size=caption_size))
 
+    doc_has_indents_rtf = any(p.get('has_indent', False) for p in paras)
+
     full_plain_text = "\n\n".join(plain_paragraphs)
     extracted_urls = parser.urls + extract_urls_from_text(full_plain_text)
     unique_urls = []
@@ -2461,7 +2477,7 @@ def parse_rtf_to_typst(
             seen_urls.add(u)
             unique_urls.append(u)
 
-    return "\n\n".join(typst_blocks), unique_urls, extracted_title, extracted_author, extracted_date, rtf_bib_entries, bib_heading_title
+    return "\n\n".join(typst_blocks), unique_urls, extracted_title, extracted_author, extracted_date, rtf_bib_entries, bib_heading_title, doc_has_indents_rtf
 
 def clean_title_and_author(title: str, author: str = None, fallback_author: str = None):
     """Bereinigt Titel und Autor deterministisch von redundanten Namensdopplungen und korrigiert Inversionen."""
@@ -3027,7 +3043,7 @@ def convert_txt_to_pdf(
     title_font_spec = resolve_title_font_spec(fmt, body_font_spec)
 
     if is_rtf:
-        body_text, urls, rtf_title, rtf_author, rtf_date, explicit_bib_entries, bib_heading_title = parse_rtf_to_typst(
+        body_text, urls, rtf_title, rtf_author, rtf_date, explicit_bib_entries, bib_heading_title, doc_has_indents = parse_rtf_to_typst(
             abs_input,
             expected_title=title or file_title_candidate,
             expected_author=author or file_author_candidate,
@@ -3104,7 +3120,7 @@ def convert_txt_to_pdf(
                 translated_body.extend(translate_via_deepl(chunk_text, target_lang=trans_tgt).split("\n"))
             body_lines = translated_body
 
-        body_text, urls, explicit_bib_entries, bib_heading_title = parse_body_to_typst(
+        body_text, urls, explicit_bib_entries, bib_heading_title, doc_has_indents = parse_body_to_typst(
             body_lines, images=images, caption_size=caption_size, use_initial=final_initial, doc_dir=doc_dir, hanging_indent=hanging_indent, title_font_spec=title_font_spec
         )
 
@@ -3186,7 +3202,8 @@ def convert_txt_to_pdf(
         title_size=bib_title_size,
         context_text=raw_doc_context,
         hanging_indent=hanging_indent,
-        leading=final_leading
+        leading=final_leading,
+        use_body_indent=doc_has_indents
     )
 
     columns_directive = f"#set columns(gutter: {final_gutter})\n" if final_columns > 1 else ""
