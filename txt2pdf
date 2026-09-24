@@ -1141,7 +1141,7 @@ def format_citation_to_apa_7(raw_citation: str, context_text: str = "") -> Dict[
         return {}
 
     bib_header_check = re.compile(
-        r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library|Verzeichnis)\b:?\s*$",
+        r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library|Verzeichnis|Referencias|Bibliografía|Fuentes)\b:?\s*$",
         re.IGNORECASE
     )
     if bib_header_check.match(clean_raw):
@@ -1673,11 +1673,11 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
     all_urls = extract_urls_from_text(full_raw_text)
 
     bib_header_exact_regex = re.compile(
-        r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library)\b:?\s*$",
+        r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library|Referencias|Bibliografía|Fuentes)\b:?\s*$",
         re.IGNORECASE
     )
     bib_header_prefix_regex = re.compile(
-        r"^(Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library)\b:?\s+(.+)$",
+        r"^(Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library|Referencias|Bibliografía|Fuentes)\b:?\s+(.+)$",
         re.IGNORECASE
     )
 
@@ -1818,7 +1818,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
     image_extensions = (".png", ".jpg", ".jpeg", ".webp", ".pdf", ".gif", ".svg", ".tiff", ".tif")
     typst_elements = []
     explicit_bib_entries = []
-    bib_heading_title = "Literaturverzeichnis"
+    bib_heading_title = None
     first_body_para_done = False
     heading_2_done = False
     in_bibliography_section = False
@@ -1832,8 +1832,8 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
     numbered_header_regex = re.compile(r"^(\d+(?:\.\d+)*[\.:\)]\s+[A-ZÄÖÜ].*)$")
     roman_header_regex = re.compile(r"^([IVXLCDM]+[\.:\)]\s+[A-ZÄÖÜ].*)$")
     alpha_header_regex = re.compile(r"^([A-Z]\.\s+[A-ZÄÖÜ].*)$")
-    bib_header_regex = re.compile(r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library)\b:?\s*$", re.IGNORECASE)
-    bib_header_inline_regex = re.compile(r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library)\b:?\s*(.*)$", re.IGNORECASE)
+    bib_header_regex = re.compile(r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library|Referencias|Bibliografía|Fuentes)\b:?\s*$", re.IGNORECASE)
+    bib_header_inline_regex = re.compile(r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library|Referencias|Bibliografía|Fuentes)\b:?\s*(.*)$", re.IGNORECASE)
 
     for i, p_info in enumerate(paragraphs):
         para = p_info["text"]
@@ -2343,13 +2343,13 @@ def parse_rtf_to_typst(
     typst_blocks = []
     plain_paragraphs = []
     rtf_bib_entries = []
-    bib_heading_title = "Literaturverzeichnis"
+    bib_heading_title = None
     first_body_para_done = False
     heading_2_done = False
     in_bib_section = False
     has_explicit_bib = False
     last_element_was_body_para = False
-    bib_header_regex = re.compile(r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library)\b:?\s*$", re.IGNORECASE)
+    bib_header_regex = re.compile(r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library|Referencias|Bibliografía|Fuentes)\b:?\s*$", re.IGNORECASE)
 
     for idx, p in enumerate(paras):
         prev_was_body_para = last_element_was_body_para
@@ -2385,7 +2385,7 @@ def parse_rtf_to_typst(
         ))
 
         m_bib_rtf = re.match(
-            r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library)\b:?\s*(.*)$",
+            r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library|Referencias|Bibliografía|Fuentes)\b:?\s*(.*)$",
             p_plain_clean,
             re.IGNORECASE
         )
@@ -2688,8 +2688,8 @@ def convert_txt_to_apa_standalone(
 
     paragraphs = []
     cur = []
-    bib_re_standalone = re.compile(r"^(?:Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography|Library):?\s*$", re.I)
-    bib_re_prefix = re.compile(r"^(Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography|Library):?\s+(.+)$", re.I)
+    bib_re_standalone = re.compile(r"^(?:Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography|Library|Referencias|Bibliografía|Fuentes):?\s*$", re.I)
+    bib_re_prefix = re.compile(r"^(Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography|Library|Referencias|Bibliografía|Fuentes):?\s+(.+)$", re.I)
 
     for l in body_lines:
         s = l.strip()
@@ -2739,7 +2739,7 @@ def convert_txt_to_apa_standalone(
             for w in words_f
         ))
 
-        m_bib_header = re.match(r"^(?:Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography|Library):?\s*(.*)$", flat, re.I)
+        m_bib_header = re.match(r"^(?:Quellen|Literatur|Literaturverzeichnis|References|Quellenverzeichnis|Works Cited|Bibliography|Library|Referencias|Bibliografía|Fuentes):?\s*(.*)$", flat, re.I)
         if m_bib_header:
             in_bib = True
             rem_bib = m_bib_header.group(1).strip()
@@ -3100,12 +3100,17 @@ def convert_txt_to_pdf(
                         translated_body.extend(translate_via_deepl(chunk_text, target_lang=trans_tgt).split("\n"))
                         curr_chunk = []
                     translated_body.append(line)
-                elif re.match(r"^(?:LITERATURVERZEICHNIS|QUELLEN|REFERENCES|LITERATURE)\b", s_line, re.I):
+                elif re.match(r"^(?:LITERATURVERZEICHNIS|QUELLEN|REFERENCES|LITERATURE|REFERENCIAS|BIBLIOGRAFÍA|FUENTES)\b", s_line, re.I):
                     if curr_chunk:
                         chunk_text = "\n".join(curr_chunk)
                         translated_body.extend(translate_via_deepl(chunk_text, target_lang=trans_tgt).split("\n"))
                         curr_chunk = []
-                    hdr = "REFERENCES" if trans_tgt == "en" else "LITERATURVERZEICHNIS"
+                    if trans_tgt == "en":
+                        hdr = "REFERENCES"
+                    elif trans_tgt == "es":
+                        hdr = "REFERENCIAS"
+                    else:
+                        hdr = "LITERATURVERZEICHNIS"
                     translated_body.append(hdr)
                 elif not s_line:
                     if curr_chunk:
@@ -3179,15 +3184,34 @@ def convert_txt_to_pdf(
 
     effective_lang = target_lang.lower().strip() if target_lang else lang
     if not target_lang and lang == "de" and 'raw_content' in locals() and raw_content:
-        words_sample = re.findall(r"\b[A-Za-z]+\b", raw_content.lower())
+        words_sample = re.findall(r"\b[A-Za-zÀ-ÿ]+\b", raw_content.lower())
         en_stop = {"the", "and", "in", "of", "to", "with", "is", "that", "for", "on", "as", "by", "this", "from"}
+        es_stop = {"el", "la", "los", "las", "un", "una", "de", "en", "y", "que", "por", "para", "con", "del", "al"}
         de_stop = {"der", "die", "das", "und", "in", "von", "zu", "mit", "ist", "dass", "für", "auf", "als"}
         en_count = sum(1 for w in words_sample if w in en_stop)
+        es_count = sum(1 for w in words_sample if w in es_stop)
         de_count = sum(1 for w in words_sample if w in de_stop)
-        if en_count > de_count and en_count >= 10:
+        if es_count > de_count and es_count > en_count and es_count >= 10:
+            effective_lang = "es"
+        elif en_count > de_count and en_count >= 10:
             effective_lang = "en"
 
-    default_bib_title = "References" if effective_lang == "en" else "Literaturverzeichnis"
+    if effective_lang == "es":
+        default_bib_title = "Referencias"
+        page_label = "Página"
+        of_label = "de"
+        author_prefix = "POR "
+    elif effective_lang == "en":
+        default_bib_title = "References"
+        page_label = "Page"
+        of_label = "of"
+        author_prefix = "BY "
+    else:
+        default_bib_title = "Literaturverzeichnis"
+        page_label = "Seite"
+        of_label = "von"
+        author_prefix = "VON "
+
     final_bib_title = bib_heading_title if bib_heading_title else default_bib_title
 
     raw_doc_context = raw_content if not is_rtf else " ".join(plain_paragraphs if 'plain_paragraphs' in locals() else [])
@@ -3212,8 +3236,8 @@ def convert_txt_to_pdf(
         author_font_spec = '("Calibre", "Helvetica Neue", "Helvetica", "Arial", "Roboto", "sans-serif")'
         if doc_author:
             clean_a = doc_author.strip()
-            if not clean_a.upper().startswith("VON "):
-                clean_a = f"VON {clean_a}"
+            if not any(clean_a.upper().startswith(p) for p in ("VON ", "BY ", "POR ")):
+                clean_a = f"{author_prefix}{clean_a}"
             author_text = clean_a.upper()
         else:
             author_text = ""
@@ -3249,8 +3273,8 @@ def convert_txt_to_pdf(
         author_block = ""
         if doc_author:
             clean_a = doc_author.strip()
-            if not clean_a.lower().startswith("von "):
-                clean_a = f"von {clean_a}"
+            if not any(clean_a.lower().startswith(p.lower()) for p in ("von ", "by ", "por ")):
+                clean_a = f"{author_prefix.lower()}{clean_a}"
             author_block = f'\n        #v(1.4mm)\n        #block[#text(style: "italic", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(clean_a)}]]'
 
         if doc_date:
@@ -3287,9 +3311,6 @@ def convert_txt_to_pdf(
 
     # Druckbare DIN-A4-Geometrie mit dynamischen Rändern (-r k | m | g)
     # Seitennummern nur bei mehrseitigen Dokumenten (total_pages > 1)
-    page_label = "Page" if effective_lang == "en" else "Seite"
-    of_label = "of" if effective_lang == "en" else "von"
-
     typst_template = f"""#import "@preview/droplet:0.3.1": dropcap
 
 #show link: set text(fill: rgb("#000000"))
