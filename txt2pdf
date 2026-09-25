@@ -1872,7 +1872,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                 typst_elements.append(f"{top_v}{fig_code}")
                 continue
 
-        # 1. Zitat-Zwischenüberschriften (fett, bei atk zentriert, bei br1/br2 im Blocktextformat)
+        # 1. Zitat-Zwischenüberschriften (fett, bei atk/br2 zentriert, bei br1 im Blocktextformat)
         is_quote_heading = (
             len(flat_text) <= 280 and (
                 (flat_text.startswith("»") and flat_text.endswith("«")) or
@@ -1884,7 +1884,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         if is_quote_heading:
             escaped = format_content_to_typst(flat_text)
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            if fmt in ("br1", "br2"):
+            if fmt == "br1":
                 typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped}]\n")
             else:
                 typst_elements.append(
@@ -1917,29 +1917,54 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         if first_line.startswith("#### "):
             h_text = escape_typst_line(first_line[5:].strip())
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
+            if fmt == "br1":
+                typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
+            else:
+                typst_elements.append(
+                    f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n"
+                )
             continue
         elif first_line.startswith("### "):
             h_text = escape_typst_line(first_line[4:].strip())
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
+            if fmt == "br1":
+                typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
+            else:
+                typst_elements.append(
+                    f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n"
+                )
             continue
         elif first_line.startswith("## "):
             h_text = escape_typst_line(first_line[3:].strip())
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
+            if fmt == "br1":
+                typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
+            else:
+                typst_elements.append(
+                    f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n"
+                )
             continue
         elif first_line.startswith("# "):
             h_text = escape_typst_line(first_line[2:].strip())
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
+            if fmt == "br1":
+                typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
+            else:
+                typst_elements.append(
+                    f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n"
+                )
             continue
 
         # 4. Explizite Kapitel- / Abschnittsüberschriften (KAPITEL 1: ..., Chapter 2 ...)
         if is_single_line and len(first_line) <= 160 and chapter_header_regex.match(first_line):
             h_text = escape_typst_line(first_line)
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
+            if fmt == "br1":
+                typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
+            else:
+                typst_elements.append(
+                    f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n"
+                )
             continue
 
         # 5. Nummerierte & alphabetische Gliederungsüberschriften (1. ..., 1.1 ..., I. ..., A. ...)
@@ -2005,13 +2030,13 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                     explicit_bib_entries.append(l)
             continue
 
-        # 8. Versalien-Überschriften (ALL CAPS / Großbuchstaben) -> Große Überschrift: bei atk zentriert, bei br1/br2 im Blocktextformat
+        # 8. Versalien-Überschriften (ALL CAPS / Großbuchstaben) -> Große Überschrift: bei atk/br2 zentriert, bei br1 im Blocktextformat
         alpha_chars = re.findall(r"[A-Za-zÄÖÜäöüß]", flat_text)
         is_all_caps = len(alpha_chars) >= 3 and flat_text.isupper() and len(flat_text) <= 200 and len(flat_text.split()) <= 20
         if is_all_caps:
             h_text = escape_typst_line(flat_text)
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            if fmt in ("br1", "br2"):
+            if fmt == "br1":
                 typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
             else:
                 typst_elements.append(
@@ -2029,11 +2054,11 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             typst_elements.append(f"{top_v}{''.join(list_lines)}")
             continue
 
-        # 10. Überschriften: Alle einzelnen Sätze oder Phrasen (mit oder ohne Punkt) werden als Überschrift erkannt (bei atk zentriert, bei br1/br2 im Blocktextformat)
+        # 10. Überschriften: Alle einzelnen Sätze oder Phrasen (mit oder ohne Punkt) werden als Überschrift erkannt (bei atk/br2 zentriert, bei br1 im Blocktextformat)
         if is_heading_sentence(flat_text):
             h_text = format_content_to_typst(flat_text)
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            if fmt in ("br1", "br2"):
+            if fmt == "br1":
                 typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
             else:
                 typst_elements.append(
@@ -2435,7 +2460,7 @@ def parse_rtf_to_typst(
             rtf_bib_entries.append(content)
             continue
 
-        # Zitate in Anführungszeichen (bei atk zentriert, bei br1/br2 im Blocktextformat)
+        # Zitate in Anführungszeichen (bei atk/br2 zentriert, bei br1 im Blocktextformat)
         is_quote = (
             len(p_plain_clean) <= 350 and (
                 (p_plain_clean.startswith("»") and p_plain_clean.endswith("«")) or
@@ -2449,7 +2474,7 @@ def parse_rtf_to_typst(
             if not t_content.startswith("#strong["):
                 t_content = f"#strong[{t_content}]"
             top_v = "#v(0.8em)\n" if (p.get('has_blank_before') and typst_blocks) else ""
-            if fmt in ("br1", "br2"):
+            if fmt == "br1":
                 typst_blocks.append(f"{top_v}#text(fill: rgb(\"#000000\"))[{t_content}]\n")
             else:
                 typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(fill: rgb(\"#000000\"))[{t_content}]\n  ]\n]\n")
@@ -2461,7 +2486,7 @@ def parse_rtf_to_typst(
         is_lead_heading = (len(typst_blocks) <= 2) and is_fully_bold and len(p_plain_clean) <= 280
         is_section_heading = is_fully_bold and len(p_plain_clean) <= 160
 
-        # Überschriften: Alle einzelnen Sätze oder Phrasen (mit oder ohne Punkt) werden als Überschrift erkannt (bei atk zentriert, bei br1/br2 im Blocktextformat)
+        # Überschriften: Alle einzelnen Sätze oder Phrasen (mit oder ohne Punkt) werden als Überschrift erkannt (bei atk/br2 zentriert, bei br1 im Blocktextformat)
         is_heading_sentence_rtf = is_heading_sentence(p_plain_clean)
 
         top_v = "#v(0.8em)\n" if (p.get('has_blank_before') and typst_blocks) else ""
@@ -2472,7 +2497,7 @@ def parse_rtf_to_typst(
             typst_blocks.append(f"{top_v}#align(right)[\n  #par(justify: false)[\n    {content}\n  ]\n]")
         elif p['heading'] or is_section_heading or is_heading_sentence_rtf or is_lead_heading:
             inner_c = t_trimmed[8:-1] if is_fully_bold else content
-            if fmt in ("br1", "br2"):
+            if fmt == "br1":
                 typst_blocks.append(f"{top_v}#strong[{inner_c}]\n")
             else:
                 typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #strong[{inner_c}]\n  ]\n]\n")
