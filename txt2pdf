@@ -1472,6 +1472,14 @@ FONT_DEFINITIONS = {
         "name": "Faustina",
         "spec": '("Faustina", "EB Garamond", "PT Serif", "Times New Roman")',
     },
+    "canela text": {
+        "name": "Canela Text",
+        "spec": '("Canela Text", "Faustina", "PT Serif", "Times New Roman")',
+    },
+    "canela": {
+        "name": "Canela Text",
+        "spec": '("Canela Text", "Faustina", "PT Serif", "Times New Roman")',
+    },
 }
 
 def resolve_font_spec(font_arg: str = None, fmt: str = "br2") -> Tuple[str, str]:
@@ -3512,7 +3520,7 @@ def main():
         f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter)"
     )
     size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 10pt bei atk, 12pt bei br2/br1; entfällt bei apa)"
-    font_help = f"Schriftart ({BLUE}Garamond{RESET}, {BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, {BLUE}Didot{RESET}, {BLUE}Cochin{RESET}, {BLUE}Big Caslon{RESET}, {BLUE}Baskerville{RESET}, {BLUE}Faustina{RESET}, {BLUE}Roboto{RESET}, {BLUE}Monaco{RESET})"
+    font_help = f"Schriftart ({BLUE}Garamond{RESET}, {BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, {BLUE}Didot{RESET}, {BLUE}Cochin{RESET}, {BLUE}Big Caslon{RESET}, {BLUE}Baskerville{RESET}, {BLUE}Faustina{RESET}, {BLUE}Canela Text{RESET}, {BLUE}Roboto{RESET}, {BLUE}Monaco{RESET})"
     margin_help = f"Ränder ({BLUE}k{RESET} (klein: 10/12mm; Standard bei atk), {BLUE}m{RESET} (mittel: 16/18mm), {BLUE}g{RESET} (groß: 22/24mm; Standard bei br2), {BLUE}r{RESET} (riesig: 34/36mm; Standard bei br1); entfällt bei apa)"
 
     parser = argparse.ArgumentParser(
