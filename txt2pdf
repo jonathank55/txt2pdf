@@ -3191,8 +3191,8 @@ def convert_txt_to_pdf(
         final_columns = columns if columns is not None else 2
         final_initial = use_initial if use_initial is not None else False
         final_gutter = gutter if gutter is not None else "5.2mm"
-        final_font_size = font_size if font_size is not None else "11pt"
-        default_leading = "0.42em"
+        final_font_size = font_size if font_size is not None else "9pt"
+        default_leading = "1.15em"
     elif fmt == "br1":
         final_columns = columns if columns is not None else 1
         final_initial = use_initial if use_initial is not None else False
@@ -3230,7 +3230,7 @@ def convert_txt_to_pdf(
 
     # Dynamische Schriftgrößen: 6pt bis 12pt (Hauptüberschrift bei atk: 36pt, sonst +6pt, Bildunterschriften -2pt)
     m = re.search(r"([\d.]+)", str(final_font_size))
-    raw_pt = float(m.group(1)) if m else (10.0 if fmt == "atk" else 12.0)
+    raw_pt = float(m.group(1)) if m else (10.0 if fmt == "atk" else (9.0 if fmt == "mdrn" else 12.0))
     base_pt = max(6.0, min(raw_pt, 12.0))
     final_font_size = f"{base_pt:g}pt"
     if fmt == "atk":
@@ -3668,12 +3668,12 @@ def main():
 
     fmt_help = (
         f"Format: {BLUE}atk{RESET} (Artikel, 3 Spalten, Garamond, mit Linie, Titel: Didot 36pt zentriert; Standard), "
-        f"{BLUE}mdrn{RESET} (Modern, 2 Spalten, Lucida Grande, große Ränder, Titel: Avenir Next regulär dynamisch), "
+        f"{BLUE}mdrn{RESET} (Modern, 2 Spalten, Lucida Grande 9pt, 1.15 Zeilenabstand, große Ränder, Titel: Avenir Next regulär dynamisch), "
         f"{BLUE}br2{RESET} (Bericht, 2 Spalten, PT Serif), "
         f"{BLUE}br1{RESET} (Bericht, 1 Spalte, PT Serif), "
         f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter)"
     )
-    size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 10pt bei atk, 11pt bei mdrn, 12pt bei br2/br1; entfällt bei apa)"
+    size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 10pt bei atk, 9pt bei mdrn, 12pt bei br2/br1; entfällt bei apa)"
     font_help = (
         f"Schriftart ({BLUE}Garamond{RESET}, {BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, "
         f"{BLUE}Didot{RESET}, {BLUE}Cochin{RESET}, {BLUE}Big Caslon{RESET}, {BLUE}Baskerville{RESET}, {BLUE}Libre Baskerville{RESET}, "
