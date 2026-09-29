@@ -3381,9 +3381,10 @@ def convert_txt_to_pdf(
         #block[#text(font: {title_font_spec}, size: best-sz, weight: "bold", fill: rgb("#000000"))[#strong[{escape_typst_line(doc_title)}]]]
         {author_typst_inline}
       ]
+      // Dynamischer Abstand vor Trennlinie: proportional zur Titelgröße (Descender ~30%)
+      v(calc.max(1.5mm, best-sz * 0.30))
+      line(length: 100%, stroke: 0.3pt + rgb("#000000"))
     }}
-    #v(1.4mm)
-    #line(length: 100%, stroke: 0.3pt + rgb("#000000"))
   ]
 ]
 """
