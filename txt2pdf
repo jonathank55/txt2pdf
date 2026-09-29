@@ -238,7 +238,8 @@ def is_author_name(candidate: str) -> bool:
     }
 
     words = re.findall(r"[A-Za-zÄÖÜäöüß]+(?:-[A-Za-zÄÖÜäöüß]+)?|\b[A-ZÄÖÜ]\.", s_clean)
-    if not (1 <= len(words) <= 5):
+    # Mindestens 2 Wörter (Vor- + Nachname) für nicht-explizit bekannte Namen
+    if not (2 <= len(words) <= 5):
         return False
 
     for w in words:
@@ -1810,6 +1811,26 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             had_blank_line = False
             continue
 
+        # Trennlinien-Erkennung: Zeilen aus wiederholten Sonderzeichen (======, ------, ___, ~~~, etc.)
+        if re.match(r"^[=\-_*~]{3,}\s*$", s):
+            if current_lines:
+                paragraphs.append({
+                    "text": "\n".join(current_lines),
+                    "has_indent": current_indent,
+                    "has_blank_before": current_blank_before
+                })
+                current_lines = []
+                current_indent = False
+            paragraphs.append({
+                "text": s,
+                "has_indent": False,
+                "has_blank_before": had_blank_line,
+                "is_separator": True
+            })
+            had_blank_line = False
+            continue
+
+
         if is_indented_line and current_lines:
             paragraphs.append({
                 "text": "\n".join(current_lines),
@@ -1862,7 +1883,13 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         flat_text = " ".join(l.strip() for l in lines_in_para).strip()
         is_single_line = (len(lines_in_para) == 1)
 
-        # 0. Explizite Inline-Abbildung: ##Pfad/zur/Datei
+        # 0. Explizite Trennlinie (======, ------, ___, ~~~, etc.) → native Typst-Linie
+        if p_info.get("is_separator") or (is_single_line and re.match(r"^[=\-_*~]{3,}\s*$", flat_text)):
+            top_v = "#v(0.5em)\n" if typst_elements else ""
+            typst_elements.append(f"{top_v}#line(length: 100%, stroke: 0.3pt + rgb(\"#000000\"))\n#v(0.5em)\n")
+            continue
+
+        # 1. Explizite Inline-Abbildung: ##Pfad/zur/Datei
         if is_single_line and first_line.startswith("##") and not first_line.startswith("###"):
             target_str = first_line[2:].strip()
             target_clean = target_str.strip("\"'")
@@ -2551,7 +2578,8 @@ def clean_title_and_author(title: str, author: str = None, fallback_author: str 
     cleaned_title = title.strip()
 
     # Inversions-Korrektur: Falls Titel fälschlicherweise ein Personenname ist und Autor eine Überschrift/Titel
-    if cleaned_title and is_author_name(cleaned_title) and (not final_author or not is_author_name(final_author)):
+    # Nur durchführen wenn tatsächlich ein nicht-leerer final_author vorliegt, der kein Personenname ist.
+    if cleaned_title and final_author and is_author_name(cleaned_title) and not is_author_name(final_author):
         cleaned_title, final_author = (final_author if final_author else ""), cleaned_title
 
     # Bereinige führende Dokumenttyp-Präfixe aus dem Titel (z. B. "Artikel : Wer schwitzt..." -> "Wer schwitzt...")
