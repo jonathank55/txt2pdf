@@ -1493,13 +1493,29 @@ FONT_DEFINITIONS = {
         "name": "Gill Sans",
         "spec": '("Gill Sans", "Gill Sans MT", "Trebuchet MS", "Optima", "Helvetica Neue", "Arial")',
     },
-    "lao mn": {
-        "name": "Lao MN",
-        "spec": '("Lao MN", "Noto Serif Lao", "PT Serif", "Times New Roman")',
+    "avenir next": {
+        "name": "Avenir Next",
+        "spec": '("Avenir Next", "Avenir", "Trebuchet MS", "Optima", "Helvetica Neue", "Arial")',
     },
-    "laomn": {
-        "name": "Lao MN",
-        "spec": '("Lao MN", "Noto Serif Lao", "PT Serif", "Times New Roman")',
+    "avenirnext": {
+        "name": "Avenir Next",
+        "spec": '("Avenir Next", "Avenir", "Trebuchet MS", "Optima", "Helvetica Neue", "Arial")',
+    },
+    "avenir": {
+        "name": "Avenir Next",
+        "spec": '("Avenir Next", "Avenir", "Trebuchet MS", "Optima", "Helvetica Neue", "Arial")',
+    },
+    "lucida grande": {
+        "name": "Lucida Grande",
+        "spec": '("Lucida Grande", "Lucida Sans Unicode", "Lucida Sans", "Verdana", "Arial")',
+    },
+    "lucidagrande": {
+        "name": "Lucida Grande",
+        "spec": '("Lucida Grande", "Lucida Sans Unicode", "Lucida Sans", "Verdana", "Arial")',
+    },
+    "lucida": {
+        "name": "Lucida Grande",
+        "spec": '("Lucida Grande", "Lucida Sans Unicode", "Lucida Sans", "Verdana", "Arial")',
     },
     "futura": {
         "name": "Futura",
@@ -1565,7 +1581,7 @@ def resolve_font_spec(font_arg: str = None, fmt: str = "br2") -> Tuple[str, str]
     elif fmt in ("br2", "br1"):
         return FONT_DEFINITIONS["pt serif"]["spec"], "PT Serif"
     elif fmt == "mdrn":
-        return FONT_DEFINITIONS["lao mn"]["spec"], "Lao MN"
+        return FONT_DEFINITIONS["lucida grande"]["spec"], "Lucida Grande"
     elif fmt == "apa":
         return FONT_DEFINITIONS["times new roman"]["spec"], "Times New Roman"
     else:
@@ -1576,7 +1592,7 @@ def resolve_title_font_spec(fmt: str, body_font_spec: str) -> str:
     if fmt == "atk":
         return FONT_DEFINITIONS["didot"]["spec"]
     if fmt == "mdrn":
-        return FONT_DEFINITIONS["gill sans"]["spec"]
+        return FONT_DEFINITIONS["avenir next"]["spec"]
     return body_font_spec
 
 def resolve_heading_font_spec(fmt: str, body_font_spec: str) -> str:
@@ -1621,13 +1637,14 @@ def install_core_fonts() -> bool:
         "CormorantGaramond-Italic[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/cormorantgaramond/CormorantGaramond-Italic%5Bwght%5D.ttf",
         "Faustina[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/faustina/Faustina%5Bwght%5D.ttf",
         "Faustina-Italic[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/faustina/Faustina-Italic%5Bwght%5D.ttf",
-        # Neue Schriften
+        # Neue Schriften (Open Source / frei verfügbar)
         "MuktaMahee[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/muktamahee/MuktaMahee%5Bwght%5D.ttf",
-        "NotoSerifLao[wdth,wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/notoseriflao/NotoSerifLao%5Bwdth%2Cwght%5D.ttf",
         "NotoSerifMalayalam[wdth,wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/notoserifmalayalam/NotoSerifMalayalam%5Bwdth%2Cwght%5D.ttf",
         "Verdana.ttf": "https://github.com/matomo-org/travis-scripts/raw/master/fonts/Verdana.ttf",
         "VerdanaBold.ttf": "https://github.com/matomo-org/travis-scripts/raw/master/fonts/Verdana_Bold.ttf",
         "VerdanaItalic.ttf": "https://github.com/matomo-org/travis-scripts/raw/master/fonts/Verdana_Italic.ttf",
+        # Hinweis: Avenir Next, Lucida Grande, Gill Sans, Futura, Malayalam MN sind macOS-Systemschriften
+        # und müssen nicht heruntergeladen werden – sie sind auf jedem Mac bereits verfügbar.
     }
 
     import urllib.request
@@ -3324,15 +3341,19 @@ def convert_txt_to_pdf(
         doc_title, doc_author = clean_title_and_author(raw_title, target_author, fallback_author=file_author_candidate)
 
     # Ränder-Auflösung (-r k | m | g | r bzw. klein | mittel | groß | riesig)
-    # Standard: 'k' (klein) bei atk, 'r' (riesig) bei br1/mdrn, 'g' (groß) bei br2; entfällt bei APA (25.4mm)
+    # Standard: 'k' (klein) bei atk, 'r' (riesig) bei br1, 'g' (groß) bei br2/mdrn; entfällt bei APA (25.4mm)
     if fmt == "atk":
         default_margin_x = "10mm"
         default_margin_y = "12mm"
         default_content_w = 190
-    elif fmt in ("br1", "mdrn"):
+    elif fmt == "br1":
         default_margin_x = "34mm"
         default_margin_y = "36mm"
         default_content_w = 142
+    elif fmt == "mdrn":
+        default_margin_x = "22mm"
+        default_margin_y = "24mm"
+        default_content_w = 166
     else:
         default_margin_x = "22mm"
         default_margin_y = "24mm"
@@ -3448,7 +3469,12 @@ def convert_txt_to_pdf(
             if doc_date:
                 author_typst_inline = f'\n        #v(1.0mm)\n        #block[#text(font: {author_font_spec}, size: 7.5pt, fill: rgb("#000000"))[{escape_typst_line(doc_date)}]]'
 
-        top_header_box = f"""// Vollbreite-Titelbox mit Trennlinie (atk: Didot maximal dynamisch, einzeilig, zentriert)
+        # Titelgewicht: atk → fett, mdrn → regulär
+        title_weight = "regular" if fmt == "mdrn" else "bold"
+        title_strong_open = "" if fmt == "mdrn" else "#strong["
+        title_strong_close = "" if fmt == "mdrn" else "]"
+
+        top_header_box = f"""// Vollbreite-Titelbox mit Trennlinie ({fmt}: {title_font_spec[:20]}... maximal dynamisch, einzeilig, zentriert)
 #place(top, scope: "parent", float: true)[
   #block(width: 100%, inset: (bottom: 0.8mm))[
     #context {{
@@ -3457,7 +3483,7 @@ def convert_txt_to_pdf(
       let high = 120.0
       for _ in range(16) {{
         let mid = (low + high) / 2.0
-        let m = measure(text(font: {title_font_spec}, size: mid * 1pt, weight: "bold")[#strong[{escape_typst_line(doc_title)}]])
+        let m = measure(text(font: {title_font_spec}, size: mid * 1pt, weight: "{title_weight}")[{title_strong_open}{escape_typst_line(doc_title)}{title_strong_close}])
         if m.width <= max-w {{
           low = mid
         }} else {{
@@ -3466,7 +3492,7 @@ def convert_txt_to_pdf(
       }}
       let best-sz = low * 1pt
       align(center)[
-        #block[#text(font: {title_font_spec}, size: best-sz, weight: "bold", fill: rgb("#000000"))[#strong[{escape_typst_line(doc_title)}]]]
+        #block[#text(font: {title_font_spec}, size: best-sz, weight: "{title_weight}", fill: rgb("#000000"))[{title_strong_open}{escape_typst_line(doc_title)}{title_strong_close}]]
         {author_typst_inline}
       ]
       // Dynamischer Abstand vor Trennlinie: proportional zur Titelgröße (Descender ~30%)
@@ -3642,7 +3668,7 @@ def main():
 
     fmt_help = (
         f"Format: {BLUE}atk{RESET} (Artikel, 3 Spalten, Garamond, mit Linie, Titel: Didot 36pt zentriert; Standard), "
-        f"{BLUE}mdrn{RESET} (Modern, 2 Spalten, Lao MN, riesige Ränder, Titel: Gill Sans dynamisch), "
+        f"{BLUE}mdrn{RESET} (Modern, 2 Spalten, Lucida Grande, große Ränder, Titel: Avenir Next regulär dynamisch), "
         f"{BLUE}br2{RESET} (Bericht, 2 Spalten, PT Serif), "
         f"{BLUE}br1{RESET} (Bericht, 1 Spalte, PT Serif), "
         f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter)"
@@ -3651,9 +3677,9 @@ def main():
     font_help = (
         f"Schriftart ({BLUE}Garamond{RESET}, {BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, "
         f"{BLUE}Didot{RESET}, {BLUE}Cochin{RESET}, {BLUE}Big Caslon{RESET}, {BLUE}Baskerville{RESET}, {BLUE}Libre Baskerville{RESET}, "
-        f"{BLUE}Faustina{RESET}, {BLUE}Canela Text{RESET}, {BLUE}Gill Sans{RESET}, {BLUE}Lao MN{RESET}, {BLUE}Futura{RESET}, "
-        f"{BLUE}Malayalam MN{RESET}, {BLUE}Mukta Mahee{RESET}, {BLUE}Publico Text{RESET}, {BLUE}Verdana{RESET}, "
-        f"{BLUE}Roboto{RESET}, {BLUE}Monaco{RESET})"
+        f"{BLUE}Faustina{RESET}, {BLUE}Canela Text{RESET}, {BLUE}Gill Sans{RESET}, {BLUE}Avenir Next{RESET}, {BLUE}Lucida Grande{RESET}, "
+        f"{BLUE}Futura{RESET}, {BLUE}Malayalam MN{RESET}, {BLUE}Mukta Mahee{RESET}, {BLUE}Publico Text{RESET}, "
+        f"{BLUE}Verdana{RESET}, {BLUE}Roboto{RESET}, {BLUE}Monaco{RESET})"
     )
     margin_help = f"Ränder ({BLUE}k{RESET} (klein: 10/12mm; Standard bei atk), {BLUE}m{RESET} (mittel: 16/18mm), {BLUE}g{RESET} (groß: 22/24mm; Standard bei br2), {BLUE}r{RESET} (riesig: 34/36mm; Standard bei br1); entfällt bei apa)"
 
