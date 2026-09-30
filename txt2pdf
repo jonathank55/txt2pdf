@@ -573,7 +573,9 @@ def fetch_doi_metadata_resilient(doi_str: str, clean_url: str) -> Optional[Dict[
                 elif a.get("name") or a.get("literal"):
                     lit = (a.get("name") or a.get("literal")).strip()
                     is_org = any(w in lit.lower() for w in ["institut", "institute", "organization", "organisation", "gmbh", "association", "office", "rki", "who", "bundesamt", "center", "centre"])
-                    if not is_org and (" " in lit or "," in lit):
+                    if is_org:
+                        auth_list.append(lit)
+                    elif (" " in lit or "," in lit):
                         apa_lit = parse_author_name_to_apa(lit)
                         if apa_lit:
                             auth_list.append(apa_lit)
@@ -1140,9 +1142,11 @@ def find_author_in_context(raw_citation: str, clean_url: str, link_meta: dict, c
             if m_auth:
                 raw_found = m_auth.group(1).strip()
                 tokens = re.split(r'\s+(?:und|and|&)\s+', raw_found)
-                res_apa = format_authors_apa(tokens)
-                if res_apa:
-                    return res_apa
+                valid_tokens = [tok.strip() for tok in tokens if len(tok.strip().split()) >= 2]
+                if valid_tokens:
+                    res_apa = format_authors_apa(valid_tokens)
+                    if res_apa:
+                        return res_apa
     return None
 
 def format_citation_to_apa_7(raw_citation: str, context_text: str = "") -> Dict[str, str]:
