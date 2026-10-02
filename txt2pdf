@@ -1595,7 +1595,7 @@ def resolve_font_spec(font_arg: str = None, fmt: str = "atk2") -> Tuple[str, str
             return f'("{font_arg.strip()}", "Optima", "PT Serif", "Times New Roman")', font_arg.strip()
 
     if fmt in ("atk2", "artikel2"):
-        return FONT_DEFINITIONS["bookerly"]["spec"], "Bookerly"
+        return FONT_DEFINITIONS["faustina"]["spec"], "Faustina"
     elif fmt in ("atk1", "atk", "artikel1", "artikel"):
         return FONT_DEFINITIONS["garamond"]["spec"], "Garamond"
     elif fmt in ("br2", "br1"):
@@ -1605,7 +1605,7 @@ def resolve_font_spec(font_arg: str = None, fmt: str = "atk2") -> Tuple[str, str
     elif fmt == "apa":
         return FONT_DEFINITIONS["times new roman"]["spec"], "Times New Roman"
     else:
-        return FONT_DEFINITIONS["bookerly"]["spec"], "Bookerly"
+        return FONT_DEFINITIONS["faustina"]["spec"], "Faustina"
 
 def resolve_title_font_spec(fmt: str, body_font_spec: str) -> str:
     """Löst die typografische Schriftartenspezifikation für die Hauptüberschrift (Titel) auf."""
@@ -3346,7 +3346,7 @@ def convert_txt_to_pdf(
         final_font_size = font_size if font_size is not None else "10pt"
         default_leading = "0.42em"
     elif fmt == "atk2":
-        # Format atk2: Kindle-Referenzformat, 3 Spalten, Bookerly, Titel zentriert in Textschriftart,
+        # Format atk2: Kindle-Referenzformat, 3 Spalten, Faustina, Titel zentriert in Textschriftart,
         # Zwischenüberschriften via # in Amazon Ember zentriert, 3-Zeilen-Initial in regulärer Textschriftart, keine Trennlinie,
         # Autor kursiv wie br2, Ränder mittel (16mm/18mm), Zeilenabstand 0.55em, Spaltensteg 5.5mm
         final_columns = columns if columns is not None else 3
@@ -3908,7 +3908,7 @@ class SingleLineHelpFormatter(argparse.HelpFormatter):
 def main():
 
     fmt_help = (
-        f"Format: {BLUE}atk2{RESET} (Kindle-Format, 3 Spalten, Bookerly, Autor in Amazon Ember, ohne Linie; Standard), "
+        f"Format: {BLUE}atk2{RESET} (Kindle-Format, 3 Spalten, Faustina, Autor in Amazon Ember, ohne Linie; Standard), "
         f"{BLUE}atk1{RESET} (Artikel, 3 Spalten, Garamond, mit Linie; Überschriften via # zentriert), "
         f"{BLUE}mdrn{RESET} (Modern, 2 Spalten, Lucida Grande, große Ränder; Überschriften via # zentriert), "
         f"{BLUE}br2{RESET} (Bericht, 2 Spalten, PT Serif, 10pt; Überschriften via # im Blocktext), "
