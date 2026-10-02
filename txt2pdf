@@ -1583,10 +1583,6 @@ FONT_DEFINITIONS = {
         "name": "Playfair Display",
         "spec": '("Playfair Display", "Baskerville", "PT Serif", "Times New Roman")',
     },
-    "oswald": {
-        "name": "Oswald",
-        "spec": '("Oswald", "Roboto Condensed", "Arial Narrow", "sans-serif")',
-    },
 }
 
 def resolve_font_spec(font_arg: str = None, fmt: str = "atk2") -> Tuple[str, str]:
@@ -1616,7 +1612,7 @@ def resolve_title_font_spec(fmt: str, body_font_spec: str) -> str:
     if fmt in ("atk1", "atk", "artikel1", "artikel"):
         return FONT_DEFINITIONS["didot"]["spec"]
     if fmt in ("atk2", "artikel2"):
-        return FONT_DEFINITIONS["oswald"]["spec"]
+        return FONT_DEFINITIONS["playfair display"]["spec"]
     if fmt == "mdrn":
         return FONT_DEFINITIONS["avenir next"]["spec"]
     return body_font_spec
@@ -1675,7 +1671,6 @@ def install_core_fonts() -> bool:
         "LibreBodoni-Italic[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/librebodoni/LibreBodoni-Italic%5Bwght%5D.ttf",
         "PlayfairDisplay[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/playfairdisplay/PlayfairDisplay%5Bwght%5D.ttf",
         "PlayfairDisplay-Italic[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/playfairdisplay/PlayfairDisplay-Italic%5Bwght%5D.ttf",
-        "Oswald[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/oswald/Oswald%5Bwght%5D.ttf",
         # Hinweis: Avenir Next, Lucida Grande, Gill Sans, Futura, Malayalam MN sind macOS-Systemschriften
         # und müssen nicht heruntergeladen werden – sie sind auf jedem Mac bereits verfügbar.
     }
@@ -2309,7 +2304,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         if use_initial and not first_body_para_done:
             init_height = 3 if fmt == "atk2" else 4
             init_weight = "regular" if fmt == "atk2" else "bold"
-            init_font = FONT_DEFINITIONS["oswald"]["spec"] if fmt == "atk2" else title_font_spec
+            init_font = FONT_DEFINITIONS["playfair display"]["spec"] if fmt == "atk2" else title_font_spec
             escaped_para = apply_initial_to_typst_element(escaped_para, font_spec=init_font, height=init_height, weight=init_weight)
             if top_v:
                 escaped_para = f"{top_v}{escaped_para}"
@@ -2785,7 +2780,7 @@ def parse_rtf_to_typst(
             if use_initial and not first_body_para_done:
                 init_height = 3 if fmt == "atk2" else 4
                 init_weight = "regular" if fmt == "atk2" else "bold"
-                init_font = FONT_DEFINITIONS["oswald"]["spec"] if fmt == "atk2" else title_font_spec
+                init_font = FONT_DEFINITIONS["playfair display"]["spec"] if fmt == "atk2" else title_font_spec
                 content_init = apply_initial_to_typst_element(content, font_spec=init_font, height=init_height, weight=init_weight)
                 if top_v:
                     content_init = f"{top_v}{content_init}"
@@ -3645,7 +3640,7 @@ def convert_txt_to_pdf(
     raw_doc_context = raw_content if not is_rtf else " ".join(plain_paragraphs if 'plain_paragraphs' in locals() else [])
     bib_title_size = f"{base_pt + 4.0:g}pt"
 
-    bib_heading_font = FONT_DEFINITIONS["oswald"]["spec"] if fmt in ("atk2", "artikel2") else title_font_spec
+    bib_heading_font = FONT_DEFINITIONS["playfair display"]["spec"] if fmt in ("atk2", "artikel2") else title_font_spec
     bibliography_typst = generate_bibliography_typst(
         urls=urls,
         explicit_entries=explicit_bib_entries,
@@ -3917,7 +3912,7 @@ class SingleLineHelpFormatter(argparse.HelpFormatter):
 def main():
 
     fmt_help = (
-        f"Format: {BLUE}atk2{RESET} (Kindle-Format, 3 Spalten, Bookerly, Titel und Literaturverzeichnis in Oswald, Autor in Amazon Ember, ohne Linie; Standard), "
+        f"Format: {BLUE}atk2{RESET} (Kindle-Format, 3 Spalten, Bookerly, Titel und Literaturverzeichnis in Playfair Display, Autor in Amazon Ember, ohne Linie; Standard), "
         f"{BLUE}atk1{RESET} (Artikel, 3 Spalten, Garamond, mit Linie; Überschriften via # zentriert), "
         f"{BLUE}mdrn{RESET} (Modern, 2 Spalten, Lucida Grande, große Ränder; Überschriften via # zentriert), "
         f"{BLUE}br2{RESET} (Bericht, 2 Spalten, PT Serif, 10pt; Überschriften via # im Blocktext), "
@@ -3926,7 +3921,7 @@ def main():
     )
     size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 10pt bei atk2/atk1/br2/br1, 9pt bei mdrn; entfällt bei apa)"
     font_help = (
-        f"Schriftart ({BLUE}Bookerly{RESET}, {BLUE}Amazon Ember{RESET}, {BLUE}Bodoni{RESET}, {BLUE}Playfair Display{RESET}, {BLUE}Oswald{RESET}, "
+        f"Schriftart ({BLUE}Bookerly{RESET}, {BLUE}Amazon Ember{RESET}, {BLUE}Playfair Display{RESET}, {BLUE}Bodoni{RESET}, "
         f"{BLUE}Garamond{RESET}, {BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, "
         f"{BLUE}Didot{RESET}, {BLUE}Cochin{RESET}, {BLUE}Big Caslon{RESET}, {BLUE}Baskerville{RESET}, {BLUE}Libre Baskerville{RESET}, "
         f"{BLUE}Faustina{RESET}, {BLUE}Canela Text{RESET}, {BLUE}Gill Sans{RESET}, {BLUE}Avenir Next{RESET}, {BLUE}Lucida Grande{RESET}, "

@@ -238,26 +238,6 @@ else
     echo -e "${GREEN}==>${NC} Playfair Display ist bereits vorhanden."
 fi
 
-# 3i. Prüfe und installiere Schriftart Oswald
-echo -e "${BLUE}==>${NC} Prüfe Schriftart Oswald..."
-OSWALD_INSTALLED=false
-if command -v typst &>/dev/null && typst fonts 2>/dev/null | grep -qi "Oswald"; then
-    OSWALD_INSTALLED=true
-fi
-if [ -f "$FONTS_DIR/Oswald[wght].ttf" ]; then
-    OSWALD_INSTALLED=true
-fi
-if [ "$OSWALD_INSTALLED" = false ]; then
-    echo -e "${BLUE}==>${NC} Installiere Oswald nach $FONTS_DIR..."
-    curl -fsSL "https://raw.githubusercontent.com/google/fonts/main/ofl/oswald/Oswald%5Bwght%5D.ttf" -o "$FONTS_DIR/Oswald[wght].ttf" 2>/dev/null || true
-    if command -v fc-cache &>/dev/null; then
-        fc-cache -f "$FONTS_DIR" &>/dev/null || true
-    fi
-    echo -e "${GREEN}==>${NC} Oswald wurde erfolgreich eingerichtet."
-else
-    echo -e "${GREEN}==>${NC} Oswald ist bereits vorhanden."
-fi
-
 # 4. Prüfe und installiere DeepL Python-Bibliothek
 echo -e "${BLUE}==>${NC} Prüfe DeepL-Bibliothek..."
 if ! python3 -c "import deepl" &>/dev/null; then
