@@ -16,7 +16,7 @@ Features:
 - Schriftarten: PT Serif (Standard via --serif), PT Mono (--mono), PT Sans (--sans), Times New Roman (--timesnew), Jost / Futura (--jost).
 - Spaltenwahl: 3-Spalten (--3col, Standard), 2-Spalten (--2col) oder 1-Spalte (--1col).
 - Single-Occurrence Author Invariant: Der Autor wird ausnahmslos genau EINMAL unter dem Titel gerendert.
-- Überschriften-Invariante: Überschriften werden ausschließlich anhand führender Markdown-Rauten ('#') erkannt (bei 'atk' und 'mdrn' zentriert, bei 'br1' und 'br2' im bündigen Blocktextformat). Alle automatischen Erkennungsregeln ohne '#' sind entfernt.
+- Überschriften-Invariante: Überschriften werden ausschließlich anhand führender Markdown-Rauten ('#') erkannt (bei 'atk1' und 'mdrn' zentriert, bei 'atk2', 'br1' und 'br2' im bündigen Blocktextformat). Alle automatischen Erkennungsregeln ohne '#' sind entfernt.
 - Intelligente Bildplatzierung via --img (semantisches Keyword-Matching).
 - Automatisches Literaturverzeichnis (APA 7).
 """
@@ -1534,9 +1534,25 @@ FONT_DEFINITIONS = {
         "name": "Verdana",
         "spec": '("Verdana", "Trebuchet MS", "Helvetica Neue", "Arial")',
     },
+    "bookerly": {
+        "name": "Bookerly",
+        "spec": '("Bookerly", "PT Serif", "Times New Roman")',
+    },
+    "amazon ember": {
+        "name": "Amazon Ember",
+        "spec": '("Amazon Ember", "Avenir Next", "Helvetica Neue", "Arial")',
+    },
+    "amazonember": {
+        "name": "Amazon Ember",
+        "spec": '("Amazon Ember", "Avenir Next", "Helvetica Neue", "Arial")',
+    },
+    "ember": {
+        "name": "Amazon Ember",
+        "spec": '("Amazon Ember", "Avenir Next", "Helvetica Neue", "Arial")',
+    },
 }
 
-def resolve_font_spec(font_arg: str = None, fmt: str = "br2") -> Tuple[str, str]:
+def resolve_font_spec(font_arg: str = None, fmt: str = "atk1") -> Tuple[str, str]:
     """Löst die typografische Schriftartenspezifikation für den Textkörper deterministisch auf."""
     if font_arg:
         cleaned = font_arg.strip().lower()
@@ -1545,8 +1561,10 @@ def resolve_font_spec(font_arg: str = None, fmt: str = "br2") -> Tuple[str, str]
                 return FONT_DEFINITIONS[cleaned]["spec"], FONT_DEFINITIONS[cleaned]["name"]
             return f'("{font_arg.strip()}", "Optima", "PT Serif", "Times New Roman")', font_arg.strip()
 
-    if fmt == "atk":
+    if fmt in ("atk1", "atk", "artikel1", "artikel"):
         return FONT_DEFINITIONS["garamond"]["spec"], "Garamond"
+    elif fmt in ("atk2", "artikel2"):
+        return FONT_DEFINITIONS["bookerly"]["spec"], "Bookerly"
     elif fmt in ("br2", "br1"):
         return FONT_DEFINITIONS["pt serif"]["spec"], "PT Serif"
     elif fmt == "mdrn":
@@ -1558,8 +1576,10 @@ def resolve_font_spec(font_arg: str = None, fmt: str = "br2") -> Tuple[str, str]
 
 def resolve_title_font_spec(fmt: str, body_font_spec: str) -> str:
     """Löst die typografische Schriftartenspezifikation für die Hauptüberschrift (Titel) auf."""
-    if fmt == "atk":
+    if fmt in ("atk1", "atk", "artikel1", "artikel"):
         return FONT_DEFINITIONS["didot"]["spec"]
+    if fmt in ("atk2", "artikel2"):
+        return FONT_DEFINITIONS["amazon ember"]["spec"]
     if fmt == "mdrn":
         return FONT_DEFINITIONS["avenir next"]["spec"]
     return body_font_spec
@@ -1569,13 +1589,13 @@ def resolve_heading_font_spec(fmt: str, body_font_spec: str) -> str:
     return body_font_spec
 
 def install_core_fonts() -> bool:
-    """Überprüft und installiert fehlende Kernschriftarten (PT Serif, Roboto, GFS Didot, Libre Baskerville, Libre Caslon, EB Garamond, Cormorant Garamond, Faustina) für Typst."""
+    """Überprüft und installiert fehlende Kernschriftarten (PT Serif, Roboto, GFS Didot, Libre Baskerville, Libre Caslon, EB Garamond, Cormorant Garamond, Faustina, Bookerly, Amazon Ember) für Typst."""
     home = os.path.expanduser("~")
     is_mac = (sys.platform == "darwin")
     font_dir = os.path.join(home, "Library", "Fonts") if is_mac else os.path.join(home, ".local", "share", "fonts")
     os.makedirs(font_dir, exist_ok=True)
 
-    print("Prüfe Kernschriftarten für txt2pdf (Times New Roman, PT Serif, Optima, Roboto, Monaco, Didot, Cochin, Big Caslon, Baskerville, Garamond, Faustina)...")
+    print("Prüfe Kernschriftarten für txt2pdf (Times New Roman, PT Serif, Optima, Roboto, Monaco, Didot, Cochin, Big Caslon, Baskerville, Garamond, Faustina, Bookerly, Amazon Ember)...")
 
     if is_mac and shutil.which("brew"):
         try:
@@ -1616,7 +1636,14 @@ def install_core_fonts() -> bool:
         # und müssen nicht heruntergeladen werden – sie sind auf jedem Mac bereits verfügbar.
     }
 
+    zip_fonts_to_download = {
+        "Bookerly.ttf": "https://font.download/dl/font/bookerly.zip",
+        "Amazon Ember.ttf": "https://font.download/dl/font/amazon-ember.zip",
+    }
+
     import urllib.request
+    import zipfile
+    import io
     downloaded_count = 0
     for filename, url in fonts_to_download.items():
         target_path = os.path.join(font_dir, filename)
@@ -1627,6 +1654,24 @@ def install_core_fonts() -> bool:
                 downloaded_count += 1
             except Exception as e:
                 print(f"Hinweis: Download von {filename} fehlgeschlagen: {e}", file=sys.stderr)
+
+    for check_file, zip_url in zip_fonts_to_download.items():
+        if not os.path.exists(os.path.join(font_dir, check_file)):
+            try:
+                print(f"Lade Schriftartenpaket für {check_file} herunter...")
+                req = urllib.request.Request(zip_url, headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'})
+                with urllib.request.urlopen(req) as resp:
+                    z_bytes = resp.read()
+                with zipfile.ZipFile(io.BytesIO(z_bytes)) as z:
+                    for z_item in z.namelist():
+                        if z_item.endswith(('.ttf', '.otf')):
+                            target_p = os.path.join(font_dir, os.path.basename(z_item))
+                            if not os.path.exists(target_p):
+                                with open(target_p, 'wb') as f_out:
+                                    f_out.write(z.read(z_item))
+                                downloaded_count += 1
+            except Exception as e:
+                print(f"Hinweis: Download von {check_file} fehlgeschlagen: {e}", file=sys.stderr)
 
     if not is_mac and shutil.which("fc-cache"):
         subprocess.run(["fc-cache", "-f", font_dir], check=False)
@@ -1795,7 +1840,7 @@ def format_lines_to_typst_paragraph(lines_in_para: List[str]) -> str:
             parts.append(esc)
         return " ".join(parts)
 
-def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str = "6pt", use_initial: bool = True, doc_dir: str = "", hanging_indent: str = "6mm", title_font_spec: str = None, fmt: str = "atk") -> Tuple[str, List[str], List[str], str, bool]:
+def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str = "6pt", use_initial: bool = True, doc_dir: str = "", hanging_indent: str = "6mm", title_font_spec: str = None, fmt: str = "atk1") -> Tuple[str, List[str], List[str], str, bool]:
     """Wandelt Textzeilen in Typst-Code um, verarbeitet Überschriften, trennt APA-Zitate für die Extraseite und extrahiert Links."""
     full_raw_text = "\n".join(raw_lines)
     all_urls = extract_urls_from_text(full_raw_text)
@@ -2070,7 +2115,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         m_heading = re.match(r"^(#{1,6})\s+(.+)$", first_line)
         if m_heading:
             h_text = escape_typst_line(m_heading.group(2).strip())
-            if fmt in ("br1", "br2"):
+            if fmt in ("br1", "br2", "atk2"):
                 typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
             else:
                 typst_elements.append(
@@ -2158,7 +2203,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             if top_v:
                 escaped_para = f"{top_v}{escaped_para}"
         else:
-            if para_has_indent:
+            if para_has_indent or (fmt == "atk2" and first_body_para_done):
                 escaped_para = f"#h(3.8mm){escaped_para}"
             if top_v:
                 escaped_para = f"{top_v}{escaped_para}"
@@ -2515,7 +2560,7 @@ def parse_rtf_to_typst(
                 t_inner = t_content[8:-1]
             else:
                 t_inner = t_content
-            v_title_gap = "1.8mm" if fmt == "atk1" else "1.4mm"
+            v_title_gap = "1.8mm" if fmt in ("atk1", "atk", "atk2") else "1.4mm"
             if fmt in ("br1", "br2"):
                 typst_blocks.append(f"#align(left)[\n  #block[\n    #text(font: {title_font_spec}, size: {title_size}, weight: \"bold\", fill: rgb(\"#000000\"))[#strong[{t_inner}]]\n  ]\n]\n#v({v_title_gap})")
             else:
@@ -2588,7 +2633,7 @@ def parse_rtf_to_typst(
         elif is_md_heading:
             clean_h = re.sub(r"^#{1,6}\s+", "", p_plain_clean).strip()
             escaped_h = format_content_to_typst(clean_h)
-            if fmt in ("br1", "br2"):
+            if fmt in ("br1", "br2", "atk2"):
                 typst_blocks.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_h}]\n{bot_v}")
             else:
                 typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_h}]\n  ]\n]\n{bot_v}")
@@ -2601,7 +2646,7 @@ def parse_rtf_to_typst(
                     content_init = f"{content_init}{bot_v}"
                 typst_blocks.append(content_init)
             else:
-                if p.get('has_indent'):
+                if p.get('has_indent') or (fmt == "atk2" and first_body_para_done):
                     content = f"#h(3.8mm){content}"
                 if top_v:
                     content = f"{top_v}{content}"
@@ -2614,7 +2659,7 @@ def parse_rtf_to_typst(
     if title_idx is None and expected_title:
         doc_title_clean, _ = clean_title_and_author(expected_title)
         if doc_title_clean:
-            v_title_gap = "1.8mm" if fmt == "atk1" else "1.4mm"
+            v_title_gap = "1.8mm" if fmt in ("atk1", "atk", "atk2") else "1.4mm"
             if fmt in ("br1", "br2"):
                 t_block = f"#align(left)[\n  #block[\n    #text(font: {title_font_spec}, size: {title_size}, weight: \"bold\", fill: rgb(\"#000000\"))[#strong[{escape_typst_line(doc_title_clean)}]]\n  ]\n]\n#v({v_title_gap})"
                 typst_blocks.insert(0, t_block)
@@ -3111,7 +3156,7 @@ def convert_txt_to_pdf(
     open_preview: bool = False,
     columns: int = None,
     font_family: str = None,
-    format_preset: str = "atk2",
+    format_preset: str = "atk1",
     use_initial: bool = None,
     target_lang: str = None,
     margins: str = None
@@ -3135,10 +3180,12 @@ def convert_txt_to_pdf(
 
     os.makedirs(os.path.dirname(abs_output), exist_ok=True)
 
-    # Format-Profil auflösen (-f atk | mdrn | br2 | br1 | apa; Standard: atk)
-    fmt_raw = (format_preset or "atk").lower().strip()
-    if fmt_raw in ("atk", "artikel", "atk2", "atk1", "artikel1", "artikel2"):
-        fmt = "atk"
+    # Format-Profil auflösen (-f atk1 | atk2 | mdrn | br2 | br1 | apa; Standard: atk1)
+    fmt_raw = (format_preset or "atk1").lower().strip()
+    if fmt_raw in ("atk1", "atk", "artikel1", "artikel"):
+        fmt = "atk1"
+    elif fmt_raw in ("atk2", "artikel2"):
+        fmt = "atk2"
     elif fmt_raw in ("mdrn", "modern", "modernist"):
         fmt = "mdrn"
     elif fmt_raw in ("br1", "bericht1"):
@@ -3178,12 +3225,21 @@ def convert_txt_to_pdf(
             open_preview=open_preview
         )
 
-    if fmt == "atk":
+    if fmt == "atk1":
         final_columns = columns if columns is not None else 3
         final_initial = use_initial if use_initial is not None else True
         final_gutter = gutter if gutter is not None else "4.8mm"
         final_font_size = font_size if font_size is not None else "10pt"
         default_leading = "0.42em"
+    elif fmt == "atk2":
+        # Format atk2: Kindle-Referenzformat, 3 Spalten, Bookerly, Amazon Ember Titel zentriert,
+        # kein Initial, keine Trennlinie, Autor kursiv wie br2, Ränder mittel (16mm/18mm),
+        # Zeilenabstand 0.55em, Wortabstand 120%
+        final_columns = columns if columns is not None else 3
+        final_initial = use_initial if use_initial is not None else False
+        final_gutter = gutter if gutter is not None else "4.8mm"
+        final_font_size = font_size if font_size is not None else "10pt"
+        default_leading = "0.55em"
     elif fmt == "mdrn":
         final_columns = columns if columns is not None else 2
         final_initial = use_initial if use_initial is not None else False
@@ -3225,12 +3281,12 @@ def convert_txt_to_pdf(
     is_rtfd = abs_input.lower().endswith(".rtfd")
     is_rtf = is_rtfd or abs_input.lower().endswith(".rtf")
 
-    # Dynamische Schriftgrößen: 6pt bis 12pt (Hauptüberschrift bei atk: 36pt, sonst +6pt, Bildunterschriften -2pt)
+    # Dynamische Schriftgrößen: 6pt bis 12pt (Hauptüberschrift bei atk1: 36pt, sonst +6pt, Bildunterschriften -2pt)
     m = re.search(r"([\d.]+)", str(final_font_size))
-    raw_pt = float(m.group(1)) if m else (10.0 if fmt == "atk" else (9.0 if fmt == "mdrn" else 12.0))
+    raw_pt = float(m.group(1)) if m else (10.0 if fmt in ("atk1", "atk2") else (9.0 if fmt == "mdrn" else 12.0))
     base_pt = max(6.0, min(raw_pt, 12.0))
     final_font_size = f"{base_pt:g}pt"
-    if fmt == "atk":
+    if fmt == "atk1":
         title_size = "36pt"
     else:
         title_size = f"{base_pt + 6.0:g}pt"
@@ -3339,11 +3395,15 @@ def convert_txt_to_pdf(
         doc_title, doc_author = clean_title_and_author(raw_title, target_author, fallback_author=file_author_candidate)
 
     # Ränder-Auflösung (-r k | m | g | r bzw. klein | mittel | groß | riesig)
-    # Standard: 'k' (klein) bei atk, 'r' (riesig) bei br1, 'g' (groß) bei br2/mdrn; entfällt bei APA (25.4mm)
-    if fmt == "atk":
+    # Standard: 'k' (klein) bei atk1, 'm' (mittel) bei atk2, 'r' (riesig) bei br1, 'g' (groß) bei br2/mdrn; entfällt bei APA (25.4mm)
+    if fmt == "atk1":
         default_margin_x = "10mm"
         default_margin_y = "12mm"
         default_content_w = 190
+    elif fmt == "atk2":
+        default_margin_x = "16mm"
+        default_margin_y = "18mm"
+        default_content_w = 178
     elif fmt == "br1":
         default_margin_x = "34mm"
         default_margin_y = "36mm"
@@ -3447,7 +3507,7 @@ def convert_txt_to_pdf(
 
     columns_directive = f"#set columns(gutter: {final_gutter})\n" if final_columns > 1 else ""
 
-    if fmt in ("atk", "mdrn"):
+    if fmt in ("atk1", "mdrn"):
         author_font_spec = '("Calibre", "Helvetica Neue", "Helvetica", "Arial", "Roboto", "sans-serif")'
         if doc_author:
             clean_a = doc_author.strip()
@@ -3467,7 +3527,7 @@ def convert_txt_to_pdf(
             if doc_date:
                 author_typst_inline = f'\n        #v(1.0mm)\n        #block[#text(font: {author_font_spec}, size: 7.5pt, fill: rgb("#000000"))[{escape_typst_line(doc_date)}]]'
 
-        # Titelgewicht: atk → fett, mdrn → regulär
+        # Titelgewicht: atk1 → fett, mdrn → regulär
         title_weight = "regular" if fmt == "mdrn" else "bold"
         title_strong_open = "" if fmt == "mdrn" else "#strong["
         title_strong_close = "" if fmt == "mdrn" else "]"
@@ -3500,11 +3560,32 @@ def convert_txt_to_pdf(
   ]
 ]
 """
+    elif fmt == "atk2":
+        # Format atk2 (Kindle-Format): Vollbreite ohne Trennlinie, Titel zentriert in Amazon Ember, Autor kursiv wie br2
+        author_block = ""
+        if doc_author:
+            clean_a = doc_author.strip()
+            m_von = re.match(r"^(?:von|by|por)\s+(.+)$", clean_a, re.IGNORECASE)
+            if m_von and is_author_name(m_von.group(1).strip()):
+                clean_a = m_von.group(1).strip()
+            author_block = f'\n        #v(1.4mm)\n        #block[#text(style: "italic", weight: "regular", fill: rgb("#000000"))[{escape_typst_line(clean_a)}]]'
+
+        date_block = f'\n        #v(1.0mm)\n        #block[#text(size: 8pt, fill: rgb("#000000"))[{escape_typst_line(doc_date)}]]' if doc_date else ""
+
+        top_header_box = f"""// Vollbreite-Titelbox ohne Trennlinie (atk2: Amazon Ember zentriert, Autor kursiv wie br2)
+#place(top, scope: "parent", float: true)[
+  #block(width: 100%, inset: (bottom: 3.5mm))[
+    #align(center)[
+      #block[#text(font: {title_font_spec}, size: {title_size}, weight: "bold", fill: rgb("#000000"))[#strong[{escape_typst_line(doc_title)}]]]{author_block}{date_block}
+    ]
+  ]
+]
+"""
     else:
         author_block = ""
         if doc_author:
             clean_a = doc_author.strip()
-            # Nur beim Format "atk" das "VON" hinzufügen (vorm Namen des Autors). Bei den anderen Formaten nicht.
+            # Nur beim Format "atk1" das "VON" hinzufügen (vorm Namen des Autors). Bei den anderen Formaten nicht.
             m_von = re.match(r"^(?:von|by|por)\s+(.+)$", clean_a, re.IGNORECASE)
             if m_von and is_author_name(m_von.group(1).strip()):
                 clean_a = m_von.group(1).strip()
@@ -3540,6 +3621,8 @@ def convert_txt_to_pdf(
     if is_rtf:
         top_header_box = ""
 
+    word_spacing_directive = ",\n  spacing: 120%" if fmt == "atk2" else ""
+
     # Druckbare DIN-A4-Geometrie mit dynamischen Rändern (-r k | m | g)
     # Seitennummern nur bei mehrseitigen Dokumenten (total_pages > 1)
     typst_template = f"""#import "@preview/droplet:0.3.1": dropcap
@@ -3567,7 +3650,7 @@ def convert_txt_to_pdf(
   size: {final_font_size},
   lang: "{effective_lang}",
   hyphenate: true,
-  costs: (hyphenation: 2000%)
+  costs: (hyphenation: 2000%){word_spacing_directive}
 )
 
 #set par(
@@ -3676,21 +3759,22 @@ class SingleLineHelpFormatter(argparse.HelpFormatter):
 def main():
 
     fmt_help = (
-        f"Format: {BLUE}atk{RESET} (Artikel, 3 Spalten, Garamond, mit Linie; Überschriften via # zentriert; Standard), "
+        f"Format: {BLUE}atk1{RESET} (Artikel, 3 Spalten, Garamond, mit Linie; Überschriften via # zentriert; Standard), "
+        f"{BLUE}atk2{RESET} (Kindle-Format, 3 Spalten, Bookerly, Amazon Ember Titel zentriert, ohne Linie, mittlere Ränder), "
         f"{BLUE}mdrn{RESET} (Modern, 2 Spalten, Lucida Grande, große Ränder; Überschriften via # zentriert), "
         f"{BLUE}br2{RESET} (Bericht, 2 Spalten, PT Serif; Überschriften via # im Blocktext), "
         f"{BLUE}br1{RESET} (Bericht, 1 Spalte, PT Serif; Überschriften via # im Blocktext), "
-        f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter). Überschriften werden nur anhand von '#' erkannt"
+        f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter). Überschriften werden nur anhand von '#' erkannt; Standard: {BLUE}atk1{RESET}"
     )
-    size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 10pt bei atk, 9pt bei mdrn, 12pt bei br2/br1; entfällt bei apa)"
+    size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 10pt bei atk1/atk2, 9pt bei mdrn, 12pt bei br2/br1; entfällt bei apa)"
     font_help = (
-        f"Schriftart ({BLUE}Garamond{RESET}, {BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, "
+        f"Schriftart ({BLUE}Garamond{RESET}, {BLUE}Bookerly{RESET}, {BLUE}Amazon Ember{RESET}, {BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, "
         f"{BLUE}Didot{RESET}, {BLUE}Cochin{RESET}, {BLUE}Big Caslon{RESET}, {BLUE}Baskerville{RESET}, {BLUE}Libre Baskerville{RESET}, "
         f"{BLUE}Faustina{RESET}, {BLUE}Canela Text{RESET}, {BLUE}Gill Sans{RESET}, {BLUE}Avenir Next{RESET}, {BLUE}Lucida Grande{RESET}, "
         f"{BLUE}Futura{RESET}, {BLUE}Malayalam MN{RESET}, {BLUE}Mukta Mahee{RESET}, {BLUE}Publico Text{RESET}, "
         f"{BLUE}Verdana{RESET}, {BLUE}Roboto{RESET}, {BLUE}Monaco{RESET})"
     )
-    margin_help = f"Ränder ({BLUE}k{RESET} (klein: 10/12mm; Standard bei atk), {BLUE}m{RESET} (mittel: 16/18mm), {BLUE}g{RESET} (groß: 22/24mm; Standard bei br2), {BLUE}r{RESET} (riesig: 34/36mm; Standard bei br1); entfällt bei apa)"
+    margin_help = f"Ränder ({BLUE}k{RESET} (klein: 10/12mm; Standard bei atk1), {BLUE}m{RESET} (mittel: 16/18mm; Standard bei atk2), {BLUE}g{RESET} (groß: 22/24mm; Standard bei br2), {BLUE}r{RESET} (riesig: 34/36mm; Standard bei br1); entfällt bei apa)"
 
     parser = argparse.ArgumentParser(
         prog="txt2pdf",
@@ -3699,7 +3783,7 @@ def main():
         add_help=False
     )
     parser.add_argument("-h", action="help", help="Hilfe anzeigen")
-    parser.add_argument("-f", dest="format_preset", metavar="FORMAT", default="atk", help=fmt_help)
+    parser.add_argument("-f", dest="format_preset", metavar="FORMAT", default="atk1", help=fmt_help)
     parser.add_argument("-z", dest="font_family", metavar="SCHRIFT", default=None, help=font_help)
     parser.add_argument("-s", dest="size", metavar="GRÖßE", default=None, help=size_help)
     parser.add_argument("-r", dest="margins", metavar="RÄNDER", default=None, help=margin_help)
@@ -3732,7 +3816,7 @@ def main():
     final_target_lang = args.target_lang
     final_margins = args.margins
     all_images = args.images or []
-    fmt = (args.format_preset or "atk").lower().strip()
+    fmt = (args.format_preset or "atk1").lower().strip()
     final_font_size = args.size if fmt != "apa" else None
     final_font = args.font_family
 
