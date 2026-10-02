@@ -142,7 +142,7 @@ def apply_initial_to_typst_element(content: str, font_spec: str = None, height: 
     return (
         f"#dropcap(\n"
         f"  height: {height},\n"
-        f"  gap: 3pt,\n"
+        f"  gap: 5pt,\n"
         f"  justify: true,\n"
         f"  transform: it => text(font: {initial_font}{weight_clause}, it)\n"
         f")[{s}]"
@@ -2114,8 +2114,8 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             quote_text = " ".join(re.sub(r"^>\s*", "", l).strip() for l in lines_in_para)
             escaped_quote = format_content_to_typst(quote_text)
             typst_elements.append(
-                f"{top_v}#block(inset: (left: 2.5mm), stroke: (left: 1.5pt + rgb(\"#000000\")))"
-                f"[#text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_quote}]]\n"
+                f"{top_v}#block(width: 100%, inset: (left: 3.5mm, y: 1.2mm), stroke: (left: 1.8pt + rgb(\"#000000\")), above: 1.0em, below: 1.4em)"
+                f"[#par(leading: 0.48em)[#text(style: \"italic\", fill: rgb(\"#000000\"))[{escaped_quote}]]]\n"
             )
             continue
 
@@ -2125,20 +2125,36 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             h_text = escape_typst_line(m_heading.group(2).strip())
             font_attr = f"font: {heading_font_spec}, " if heading_font_spec else ""
             if fmt in ("atk1", "atk2"):
-                h_top_v = "#v(1.4em)\n" if typst_elements else ""
-                h_bot_v = "#v(1.5em)\n"
                 typst_elements.append(
-                    f"{h_top_v}#align(center)[\n  #par(justify: false, leading: 0.38em)[\n    #text({font_attr}weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n{h_bot_v}"
+                    f"#block(width: 100%, breakable: false, sticky: true, above: 1.4em, below: 1.5em)[\n"
+                    f"  #align(center)[\n"
+                    f"    #par(justify: false, leading: 0.38em)[\n"
+                    f"      #text({font_attr}weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n"
+                    f"    ]\n"
+                    f"  ]\n"
+                    f"]\n"
                 )
                 last_element_was_heading = True
             elif fmt in ("br1", "br2"):
-                typst_elements.append(f"{top_v}#text({font_attr}weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
-                last_element_was_heading = False
+                typst_elements.append(
+                    f"#block(width: 100%, breakable: false, sticky: true, above: 1.2em, below: 0.8em)[\n"
+                    f"  #par(justify: false)[\n"
+                    f"    #text({font_attr}weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n"
+                    f"  ]\n"
+                    f"]\n"
+                )
+                last_element_was_heading = True
             else:
                 typst_elements.append(
-                    f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text({font_attr}weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n"
+                    f"#block(width: 100%, breakable: false, sticky: true, above: 1.2em, below: 0.8em)[\n"
+                    f"  #align(center)[\n"
+                    f"    #par(justify: false)[\n"
+                    f"      #text({font_attr}weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n"
+                    f"    ]\n"
+                    f"  ]\n"
+                    f"]\n"
                 )
-                last_element_was_heading = False
+                last_element_was_heading = True
             continue
 
 
@@ -2661,16 +2677,36 @@ def parse_rtf_to_typst(
             escaped_h = format_content_to_typst(clean_h)
             font_attr = f"font: {heading_font_spec}, " if heading_font_spec else ""
             if fmt in ("atk1", "atk2"):
-                h_top_v = "#v(1.4em)\n" if typst_blocks else ""
-                h_bot_v = "\n#v(1.5em)"
-                typst_blocks.append(f"{h_top_v}#align(center)[\n  #par(justify: false, leading: 0.38em)[\n    #text({font_attr}weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_h}]\n  ]\n]{h_bot_v}")
+                typst_blocks.append(
+                    f"#block(width: 100%, breakable: false, sticky: true, above: 1.4em, below: 1.5em)[\n"
+                    f"  #align(center)[\n"
+                    f"    #par(justify: false, leading: 0.38em)[\n"
+                    f"      #text({font_attr}weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_h}]\n"
+                    f"    ]\n"
+                    f"  ]\n"
+                    f"]"
+                )
                 last_element_was_heading = True
             elif fmt in ("br1", "br2"):
-                typst_blocks.append(f"{top_v}#text({font_attr}weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_h}]\n{bot_v}")
-                last_element_was_heading = False
+                typst_blocks.append(
+                    f"#block(width: 100%, breakable: false, sticky: true, above: 1.2em, below: 0.8em)[\n"
+                    f"  #par(justify: false)[\n"
+                    f"    #text({font_attr}weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_h}]\n"
+                    f"  ]\n"
+                    f"]"
+                )
+                last_element_was_heading = True
             else:
-                typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text({font_attr}weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_h}]\n  ]\n]\n{bot_v}")
-                last_element_was_heading = False
+                typst_blocks.append(
+                    f"#block(width: 100%, breakable: false, sticky: true, above: 1.2em, below: 0.8em)[\n"
+                    f"  #align(center)[\n"
+                    f"    #par(justify: false)[\n"
+                    f"      #text({font_attr}weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_h}]\n"
+                    f"    ]\n"
+                    f"  ]\n"
+                    f"]"
+                )
+                last_element_was_heading = True
         else:
             if use_initial and not first_body_para_done:
                 init_height = 3 if fmt == "atk2" else 4
@@ -3689,7 +3725,8 @@ def convert_txt_to_pdf(
   font: {body_font_spec},
   size: {final_font_size},
   lang: "{effective_lang}",
-  hyphenate: true
+  hyphenate: true,
+  costs: (hyphenation: 140%, orphan: 150%, widow: 150%)
 )
 
 #set par(
