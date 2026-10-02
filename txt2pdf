@@ -2001,7 +2001,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         if m_heading:
             h_text = escape_typst_line(m_heading.group(2).strip())
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            if fmt == "br1":
+            if fmt in ("br1", "br2"):
                 typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
             else:
                 typst_elements.append(
@@ -2457,13 +2457,19 @@ def parse_rtf_to_typst(
             else:
                 t_inner = t_content
             v_title_gap = "1.8mm" if fmt == "atk1" else "1.4mm"
-            typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    #text(font: {title_font_spec}, size: {title_size}, weight: \"bold\", fill: rgb(\"#000000\"))[#strong[{t_inner}]]\n  ]\n]\n#v({v_title_gap})")
+            if fmt in ("br1", "br2"):
+                typst_blocks.append(f"#align(left)[\n  #block[\n    #text(font: {title_font_spec}, size: {title_size}, weight: \"bold\", fill: rgb(\"#000000\"))[#strong[{t_inner}]]\n  ]\n]\n#v({v_title_gap})")
+            else:
+                typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    #text(font: {title_font_spec}, size: {title_size}, weight: \"bold\", fill: rgb(\"#000000\"))[#strong[{t_inner}]]\n  ]\n]\n#v({v_title_gap})")
             continue
 
         if title_idx is not None and idx == title_idx + 1 and (is_author_name(p_plain_clean) or p.get('align') == 'center' or p_plain_clean == extracted_author or bool(re.match(r"^(?:autor|author|von|by):\s*", p_plain_clean, re.I))):
             if not extracted_author:
                 extracted_author = p_plain_clean
-            typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    #text(style: \"italic\", weight: \"regular\", fill: rgb(\"#000000\"))[{content}]\n  ]\n]\n#v(1.5mm)")
+            if fmt in ("br1", "br2"):
+                typst_blocks.append(f"#align(left)[\n  #block[\n    #text(style: \"italic\", weight: \"regular\", fill: rgb(\"#000000\"))[{content}]\n  ]\n]\n#v(1.5mm)")
+            else:
+                typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    #text(style: \"italic\", weight: \"regular\", fill: rgb(\"#000000\"))[{content}]\n  ]\n]\n#v(1.5mm)")
             continue
 
         # Literaturverzeichnis-Abschnitt
@@ -2529,7 +2535,7 @@ def parse_rtf_to_typst(
         elif is_md_heading:
             clean_h = re.sub(r"^#{1,6}\s+", "", p_plain_clean).strip()
             escaped_h = format_content_to_typst(clean_h)
-            if fmt == "br1":
+            if fmt in ("br1", "br2"):
                 typst_blocks.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_h}]\n")
             else:
                 typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_h}]\n  ]\n]\n")
@@ -2556,11 +2562,18 @@ def parse_rtf_to_typst(
         doc_title_clean, _ = clean_title_and_author(expected_title)
         if doc_title_clean:
             v_title_gap = "1.8mm" if fmt == "atk1" else "1.4mm"
-            t_block = f"#align(center)[\n  #par(justify: false)[\n    #text(font: {title_font_spec}, size: {title_size}, weight: \"bold\", fill: rgb(\"#000000\"))[#strong[{escape_typst_line(doc_title_clean)}]]\n  ]\n]\n#v({v_title_gap})"
-            typst_blocks.insert(0, t_block)
-            if expected_author:
-                a_block = f"#align(center)[\n  #par(justify: false)[\n    #text(style: \"italic\", weight: \"regular\", fill: rgb(\"#000000\"))[{escape_typst_line(expected_author)}]\n  ]\n]\n#v(1.5mm)"
-                typst_blocks.insert(1, a_block)
+            if fmt in ("br1", "br2"):
+                t_block = f"#align(left)[\n  #block[\n    #text(font: {title_font_spec}, size: {title_size}, weight: \"bold\", fill: rgb(\"#000000\"))[#strong[{escape_typst_line(doc_title_clean)}]]\n  ]\n]\n#v({v_title_gap})"
+                typst_blocks.insert(0, t_block)
+                if expected_author:
+                    a_block = f"#align(left)[\n  #block[\n    #text(style: \"italic\", weight: \"regular\", fill: rgb(\"#000000\"))[{escape_typst_line(expected_author)}]\n  ]\n]\n#v(1.5mm)"
+                    typst_blocks.insert(1, a_block)
+            else:
+                t_block = f"#align(center)[\n  #par(justify: false)[\n    #text(font: {title_font_spec}, size: {title_size}, weight: \"bold\", fill: rgb(\"#000000\"))[#strong[{escape_typst_line(doc_title_clean)}]]\n  ]\n]\n#v({v_title_gap})"
+                typst_blocks.insert(0, t_block)
+                if expected_author:
+                    a_block = f"#align(center)[\n  #par(justify: false)[\n    #text(style: \"italic\", weight: \"regular\", fill: rgb(\"#000000\"))[{escape_typst_line(expected_author)}]\n  ]\n]\n#v(1.5mm)"
+                    typst_blocks.insert(1, a_block)
 
     # Falls Bilder über -i übergeben wurden, diese am Ende anhängen
     if images:
