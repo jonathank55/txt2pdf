@@ -1695,7 +1695,8 @@ def generate_bibliography_typst(
     use_body_indent: bool = False,
     indent_str: str = "3.8mm",
     show_rule: bool = True,
-    title_font_spec: str = None
+    title_font_spec: str = None,
+    fmt: str = "atk2"
 ) -> str:
     """Erzeugt das standardkonforme APA-Literaturverzeichnis im Blocktext mit optionaler Trennlinie, zentrierter Überschrift und synchronisiertem Zeilenabstand."""
     citations = []
@@ -1757,12 +1758,37 @@ def generate_bibliography_typst(
 
     body = "\n".join(entries_typst)
 
-    separator_typst = """#v(1.0em)
+    bib_font_attr = f"font: {title_font_spec}, " if title_font_spec else ""
+    if fmt in ("atk1", "atk2"):
+        separator_typst = """#v(1.0em)\n#line(length: 100%, stroke: 0.3pt + rgb("#000000"))\n""" if show_rule else ""
+        header_block = f"""{separator_typst}#block(width: 100%, breakable: false, sticky: true, above: 2.8em, below: 2.8em)[
+  #align(center)[
+    #par(justify: false, leading: 0.38em)[
+      #set text(hyphenate: false)
+      #text({bib_font_attr}size: {title_size}, weight: \"bold\", hyphenate: false, fill: rgb(\"#000000\"))[{escape_typst_line(bib_title)}]
+    ]
+  ]
+]"""
+        return f"""
+{header_block}
+
+#show link: set text(fill: rgb("#0b57d0"))
+#set text(font: {font_spec}, size: {font_size}, hyphenate: true)
+#set par(
+  hanging-indent: {par_hanging},
+  leading: {leading},
+  spacing: {leading},
+  justify: true,
+  linebreaks: "optimized"
+)
+
+{body}
+"""
+    else:
+        separator_typst = """#v(1.0em)
 #line(length: 100%, stroke: 0.3pt + rgb("#000000"))
 #v(0.6em)""" if show_rule else """#v(1.0em)"""
-
-    bib_font_attr = f"font: {title_font_spec}, " if title_font_spec else ""
-    return f"""
+        return f"""
 {separator_typst}
 #align(center)[
   #par(justify: false)[
@@ -3591,7 +3617,8 @@ def convert_txt_to_pdf(
         leading=final_leading,
         use_body_indent=doc_has_indents,
         show_rule=(fmt != "atk2"),
-        title_font_spec=bib_heading_font
+        title_font_spec=bib_heading_font,
+        fmt=fmt
     )
 
     columns_directive = f"#set columns(gutter: {final_gutter})\n" if final_columns > 1 else ""
