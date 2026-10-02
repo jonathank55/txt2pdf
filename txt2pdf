@@ -1994,11 +1994,18 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         if is_single_line and first_line.startswith("##") and not first_line.startswith("###"):
             target_str = first_line[2:].strip()
             target_clean = target_str.strip("\"'")
+            unescaped = target_clean.replace(r"\ ", " ").replace(r"\:", ":")
             resolved_img = None
-            if os.path.isabs(target_clean) and os.path.exists(target_clean):
+            if os.path.isabs(unescaped) and os.path.exists(unescaped):
+                resolved_img = unescaped
+            elif os.path.isabs(target_clean) and os.path.exists(target_clean):
                 resolved_img = target_clean
+            elif doc_dir and os.path.exists(os.path.join(doc_dir, unescaped)):
+                resolved_img = os.path.join(doc_dir, unescaped)
             elif doc_dir and os.path.exists(os.path.join(doc_dir, target_clean)):
                 resolved_img = os.path.join(doc_dir, target_clean)
+            elif any(unescaped.lower().endswith(ext) for ext in image_extensions):
+                resolved_img = unescaped
             elif any(target_clean.lower().endswith(ext) for ext in image_extensions):
                 resolved_img = target_clean
 
