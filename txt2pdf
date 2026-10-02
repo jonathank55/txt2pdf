@@ -132,18 +132,19 @@ def format_content_to_typst(text: str) -> str:
 def convert_markdown_formatting_to_typst(text: str) -> str:
     return format_content_to_typst(text)
 
-def apply_initial_to_typst_element(content: str, font_spec: str = None) -> str:
+def apply_initial_to_typst_element(content: str, font_spec: str = None, height: int = 4, weight: str = "bold") -> str:
     """Wendet ein typografisches großes Initial (Drop Cap) via droplet mit der Titelschriftart auf den Beginn eines Typst-Fließtextblocks an."""
     s = content.strip()
     if not s or s.startswith("#dropcap") or s.startswith("#table") or s.startswith("- ") or s.startswith("#grid") or s.startswith("#align"):
         return s
     initial_font = font_spec if font_spec else FONT_DEFINITIONS["didot"]["spec"]
+    weight_clause = f', weight: "{weight}"' if weight else ""
     return (
         f"#dropcap(\n"
-        f"  height: 4,\n"
+        f"  height: {height},\n"
         f"  gap: 3pt,\n"
         f"  justify: true,\n"
-        f"  transform: it => text(font: {initial_font}, weight: \"bold\", it)\n"
+        f"  transform: it => text(font: {initial_font}{weight_clause}, it)\n"
         f")[{s}]"
     )
 
@@ -2203,7 +2204,9 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         # 11. Regulärer Fließtextabsatz (Standard mit optionalem Initial im 1. Fließtext-Absatz)
         escaped_para = format_lines_to_typst_paragraph(p_raw_lines)
         if use_initial and not first_body_para_done:
-            escaped_para = apply_initial_to_typst_element(escaped_para, font_spec=title_font_spec)
+            init_height = 3 if fmt == "atk2" else 4
+            init_weight = "regular" if fmt == "atk2" else "bold"
+            escaped_para = apply_initial_to_typst_element(escaped_para, font_spec=title_font_spec, height=init_height, weight=init_weight)
             if top_v:
                 escaped_para = f"{top_v}{escaped_para}"
         else:
@@ -2645,7 +2648,9 @@ def parse_rtf_to_typst(
                 typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text({font_attr}weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_h}]\n  ]\n]\n{bot_v}")
         else:
             if use_initial and not first_body_para_done:
-                content_init = apply_initial_to_typst_element(content, font_spec=title_font_spec)
+                init_height = 3 if fmt == "atk2" else 4
+                init_weight = "regular" if fmt == "atk2" else "bold"
+                content_init = apply_initial_to_typst_element(content, font_spec=title_font_spec, height=init_height, weight=init_weight)
                 if top_v:
                     content_init = f"{top_v}{content_init}"
                 if bot_v:
@@ -3239,7 +3244,7 @@ def convert_txt_to_pdf(
         default_leading = "0.42em"
     elif fmt == "atk2":
         # Format atk2: Kindle-Referenzformat, 3 Spalten, Bookerly, Titel zentriert in Textschriftart,
-        # Zwischenüberschriften via # in Amazon Ember zentriert, Initial in Textschriftart, keine Trennlinie,
+        # Zwischenüberschriften via # in Amazon Ember zentriert, 3-Zeilen-Initial in regulärer Textschriftart, keine Trennlinie,
         # Autor kursiv wie br2, Ränder mittel (16mm/18mm), Zeilenabstand 0.55em, Spaltensteg 5.5mm
         final_columns = columns if columns is not None else 3
         final_initial = use_initial if use_initial is not None else True
