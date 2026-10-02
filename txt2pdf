@@ -3111,10 +3111,10 @@ def convert_txt_to_apa_standalone(
 
         if flat.startswith("# "):
             esc_h = format_content_to_typst(re.sub(r"^#+\s*", "", flat))
-            elements.append(f"\n#align(center)[#text(weight: \"bold\")[{esc_h}]]\n")
+            elements.append(f'\n#block(width: 100%, breakable: false, sticky: true, above: 1.5em, below: 0.8em)[#align(center)[#text(weight: "bold")[{esc_h}]]]\n')
         elif is_h or flat.startswith("## "):
             esc_h = format_content_to_typst(re.sub(r"^#+\s*", "", flat))
-            elements.append(f"\n#text(weight: \"bold\")[{esc_h}]\n")
+            elements.append(f'\n#block(width: 100%, breakable: false, sticky: true, above: 1.5em, below: 0.8em)[#align(left)[#text(weight: "bold")[{esc_h}]]]\n')
         else:
             esc_p = format_content_to_typst(flat)
             elements.append(f"{esc_p}\n")
@@ -3125,8 +3125,9 @@ def convert_txt_to_apa_standalone(
     if bib_entries:
         apa_refs = f"""
 #pagebreak()
-#align(center)[#text(weight: "bold")[References]]
-#v(1.2em)
+#block(width: 100%, breakable: false, sticky: true, above: 0pt, below: 1.2em)[
+  #align(center)[#text(weight: "bold")[References]]
+]
 
 {"".join(bib_entries)}
 """
