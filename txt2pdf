@@ -3351,7 +3351,7 @@ def convert_txt_to_pdf(
         final_columns = columns if columns is not None else 3
         final_initial = use_initial if use_initial is not None else True
         final_gutter = gutter if gutter is not None else "5.5mm"
-        final_font_size = font_size if font_size is not None else "10pt"
+        final_font_size = font_size if font_size is not None else "9pt"
         default_leading = "0.55em"
     elif fmt == "mdrn":
         final_columns = columns if columns is not None else 2
@@ -3396,7 +3396,7 @@ def convert_txt_to_pdf(
 
     # Dynamische Schriftgrößen: 6pt bis 12pt (Hauptüberschrift bei atk1: 36pt, bei atk2: base_pt + 12pt, sonst +6pt, Bildunterschriften -2pt)
     m = re.search(r"([\d.]+)", str(final_font_size))
-    raw_pt = float(m.group(1)) if m else (10.0 if fmt in ("atk1", "atk2", "br1", "br2") else 9.0)
+    raw_pt = float(m.group(1)) if m else (10.0 if fmt in ("atk1", "br1", "br2") else 9.0)
     base_pt = max(6.0, min(raw_pt, 12.0))
     final_font_size = f"{base_pt:g}pt"
     if fmt == "atk1":
@@ -3920,7 +3920,7 @@ def main():
         f"{BLUE}br1{RESET} (Bericht, 1 Spalte, PT Serif, 10pt; Überschriften via # im Blocktext), "
         f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter). Überschriften werden nur anhand von '#' erkannt; Standard: {BLUE}atk2{RESET}"
     )
-    size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 10pt bei atk2/atk1/br2/br1, 9pt bei mdrn; entfällt bei apa)"
+    size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 10pt bei atk1/br2/br1, 9pt bei atk2/mdrn; entfällt bei apa)"
     font_help = (
         f"Schriftart ({BLUE}Bookerly{RESET}, {BLUE}Amazon Ember{RESET}, {BLUE}Playfair Display{RESET}, {BLUE}Bodoni{RESET}, "
         f"{BLUE}Garamond{RESET}, {BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, "
