@@ -1690,9 +1690,10 @@ def generate_bibliography_typst(
     hanging_indent: str = "12.7mm",
     leading: str = "0.35em",
     use_body_indent: bool = False,
-    indent_str: str = "3.8mm"
+    indent_str: str = "3.8mm",
+    show_rule: bool = True
 ) -> str:
-    """Erzeugt das standardkonforme APA-Literaturverzeichnis im Blocktext mit vorangestellter Trennlinie, zentrierter Überschrift und synchronisiertem Zeilenabstand."""
+    """Erzeugt das standardkonforme APA-Literaturverzeichnis im Blocktext mit optionaler Trennlinie, zentrierter Überschrift und synchronisiertem Zeilenabstand."""
     citations = []
     seen_formatted = set()
     seen_urls = set()
@@ -1752,10 +1753,12 @@ def generate_bibliography_typst(
 
     body = "\n".join(entries_typst)
 
-    return f"""
-#v(1.0em)
+    separator_typst = """#v(1.0em)
 #line(length: 100%, stroke: 0.3pt + rgb("#000000"))
-#v(0.6em)
+#v(0.6em)""" if show_rule else """#v(1.0em)"""
+
+    return f"""
+{separator_typst}
 #align(center)[
   #text(size: {title_size}, weight: "bold", fill: rgb("#000000"))[{escape_typst_line(bib_title)}]
 ]
@@ -3507,7 +3510,8 @@ def convert_txt_to_pdf(
         context_text=raw_doc_context,
         hanging_indent=hanging_indent,
         leading=final_leading,
-        use_body_indent=doc_has_indents
+        use_body_indent=doc_has_indents,
+        show_rule=(fmt != "atk2")
     )
 
     columns_directive = f"#set columns(gutter: {final_gutter})\n" if final_columns > 1 else ""
