@@ -2114,8 +2114,8 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             quote_text = " ".join(re.sub(r"^>\s*", "", l).strip() for l in lines_in_para)
             escaped_quote = format_content_to_typst(quote_text)
             typst_elements.append(
-                f"{top_v}#block(width: 100%, inset: (left: 3.5mm, y: 1.2mm), stroke: (left: 1.8pt + rgb(\"#000000\")), above: 1.0em, below: 1.4em)"
-                f"[#par(leading: 0.48em)[#text(style: \"italic\", fill: rgb(\"#000000\"))[{escaped_quote}]]]\n"
+                f"{top_v}#block(width: 100%, inset: (left: 4.5mm, y: 2.2mm), stroke: (left: 2pt + rgb(\"#000000\")), above: 1.2em, below: 1.6em)"
+                f"[#par(leading: 0.52em)[#text(style: \"italic\", fill: rgb(\"#000000\"))[{escaped_quote}]]]\n"
             )
             continue
 
@@ -2124,24 +2124,31 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         if m_heading:
             h_text = escape_typst_line(m_heading.group(2).strip())
             font_attr = f"font: {heading_font_spec}, " if heading_font_spec else ""
+            is_first_heading = (len(typst_elements) == 0)
+            spacer_in = "" if is_first_heading else "  #box(height: 3.8cm)\n"
+            spacer_out = "" if is_first_heading else "#v(-3.8cm)\n"
             if fmt in ("atk1", "atk2"):
                 typst_elements.append(
                     f"#block(width: 100%, breakable: false, sticky: true, above: 1.4em, below: 1.5em)[\n"
                     f"  #align(center)[\n"
                     f"    #par(justify: false, leading: 0.38em)[\n"
-                    f"      #text({font_attr}weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n"
+                    f"      #text({font_attr}weight: \"bold\", hyphenate: false, fill: rgb(\"#000000\"))[{h_text}]\n"
                     f"    ]\n"
                     f"  ]\n"
+                    f"{spacer_in}"
                     f"]\n"
+                    f"{spacer_out}"
                 )
                 last_element_was_heading = True
             elif fmt in ("br1", "br2"):
                 typst_elements.append(
                     f"#block(width: 100%, breakable: false, sticky: true, above: 1.2em, below: 0.8em)[\n"
                     f"  #par(justify: false)[\n"
-                    f"    #text({font_attr}weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n"
+                    f"    #text({font_attr}weight: \"bold\", hyphenate: false, fill: rgb(\"#000000\"))[{h_text}]\n"
                     f"  ]\n"
+                    f"{spacer_in}"
                     f"]\n"
+                    f"{spacer_out}"
                 )
                 last_element_was_heading = True
             else:
@@ -2149,10 +2156,11 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                     f"#block(width: 100%, breakable: false, sticky: true, above: 1.2em, below: 0.8em)[\n"
                     f"  #align(center)[\n"
                     f"    #par(justify: false)[\n"
-                    f"      #text({font_attr}weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n"
-                    f"    ]\n"
+                    f"      #text({font_attr}weight: \"bold\", hyphenate: false, fill: rgb(\"#000000\"))[{h_text}]\n"
                     f"  ]\n"
+                    f"{spacer_in}"
                     f"]\n"
+                    f"{spacer_out}"
                 )
                 last_element_was_heading = True
             continue
@@ -2237,8 +2245,11 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             init_weight = "regular" if fmt == "atk2" else "bold"
             init_font = FONT_DEFINITIONS["baskerville"]["spec"] if fmt == "atk2" else title_font_spec
             escaped_para = apply_initial_to_typst_element(escaped_para, font_spec=init_font, height=init_height, weight=init_weight)
+            top_gap = "#v(1.4em)\n" if typst_elements else ""
             if top_v:
-                escaped_para = f"{top_v}{escaped_para}"
+                escaped_para = f"{top_gap}{top_v}{escaped_para}"
+            else:
+                escaped_para = f"{top_gap}{escaped_para}"
         else:
             if para_has_indent or (fmt == "atk2" and first_body_para_done):
                 escaped_para = f"#h(3.8mm){escaped_para}"
@@ -2676,24 +2687,31 @@ def parse_rtf_to_typst(
             clean_h = re.sub(r"^#{1,6}\s+", "", p_plain_clean).strip()
             escaped_h = format_content_to_typst(clean_h)
             font_attr = f"font: {heading_font_spec}, " if heading_font_spec else ""
+            is_first_heading = (len(typst_blocks) == 0)
+            spacer_in = "" if is_first_heading else "  #box(height: 3.8cm)\n"
+            spacer_out = "" if is_first_heading else "#v(-3.8cm)\n"
             if fmt in ("atk1", "atk2"):
                 typst_blocks.append(
                     f"#block(width: 100%, breakable: false, sticky: true, above: 1.4em, below: 1.5em)[\n"
                     f"  #align(center)[\n"
                     f"    #par(justify: false, leading: 0.38em)[\n"
-                    f"      #text({font_attr}weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_h}]\n"
+                    f"      #text({font_attr}weight: \"bold\", hyphenate: false, fill: rgb(\"#000000\"))[{escaped_h}]\n"
                     f"    ]\n"
                     f"  ]\n"
-                    f"]"
+                    f"{spacer_in}"
+                    f"]\n"
+                    f"{spacer_out}"
                 )
                 last_element_was_heading = True
             elif fmt in ("br1", "br2"):
                 typst_blocks.append(
                     f"#block(width: 100%, breakable: false, sticky: true, above: 1.2em, below: 0.8em)[\n"
                     f"  #par(justify: false)[\n"
-                    f"    #text({font_attr}weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_h}]\n"
+                    f"    #text({font_attr}weight: \"bold\", hyphenate: false, fill: rgb(\"#000000\"))[{escaped_h}]\n"
                     f"  ]\n"
-                    f"]"
+                    f"{spacer_in}"
+                    f"]\n"
+                    f"{spacer_out}"
                 )
                 last_element_was_heading = True
             else:
@@ -2701,10 +2719,11 @@ def parse_rtf_to_typst(
                     f"#block(width: 100%, breakable: false, sticky: true, above: 1.2em, below: 0.8em)[\n"
                     f"  #align(center)[\n"
                     f"    #par(justify: false)[\n"
-                    f"      #text({font_attr}weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_h}]\n"
-                    f"    ]\n"
+                    f"      #text({font_attr}weight: \"bold\", hyphenate: false, fill: rgb(\"#000000\"))[{escaped_h}]\n"
                     f"  ]\n"
-                    f"]"
+                    f"{spacer_in}"
+                    f"]\n"
+                    f"{spacer_out}"
                 )
                 last_element_was_heading = True
         else:
@@ -2713,8 +2732,11 @@ def parse_rtf_to_typst(
                 init_weight = "regular" if fmt == "atk2" else "bold"
                 init_font = FONT_DEFINITIONS["baskerville"]["spec"] if fmt == "atk2" else title_font_spec
                 content_init = apply_initial_to_typst_element(content, font_spec=init_font, height=init_height, weight=init_weight)
+                top_gap = "#v(1.4em)\n" if typst_blocks else ""
                 if top_v:
-                    content_init = f"{top_v}{content_init}"
+                    content_init = f"{top_gap}{top_v}{content_init}"
+                else:
+                    content_init = f"{top_gap}{content_init}"
                 if bot_v:
                     content_init = f"{content_init}{bot_v}"
                 typst_blocks.append(content_init)
@@ -3703,6 +3725,9 @@ def convert_txt_to_pdf(
     # Seitennummern nur bei mehrseitigen Dokumenten (total_pages > 1)
     typst_template = f"""#import "@preview/droplet:0.3.1": dropcap
 
+#show regex("(?i)finanziell[a-z]*"): it => text(hyphenate: false)[#it]
+#show regex("(?i)ausbeuterisch[a-z]*"): it => text(hyphenate: false)[#it]
+
 #show link: set text(fill: rgb("#000000"))
 
 #set page(
@@ -3726,7 +3751,7 @@ def convert_txt_to_pdf(
   size: {final_font_size},
   lang: "{effective_lang}",
   hyphenate: true,
-  costs: (hyphenation: 140%, orphan: 150%, widow: 150%)
+  costs: (hyphenation: 140%, runt: 150%, orphan: 200%, widow: 200%)
 )
 
 #set par(
