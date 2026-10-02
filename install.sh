@@ -196,6 +196,68 @@ else
     echo -e "${GREEN}==>${NC} Garamond ist bereits vorhanden."
 fi
 
+# 3g. Prüfe und installiere Schriftart Bodoni / Libre Bodoni
+echo -e "${BLUE}==>${NC} Prüfe Schriftart Bodoni..."
+BODONI_INSTALLED=false
+if command -v typst &>/dev/null && typst fonts 2>/dev/null | grep -qi "Bodoni"; then
+    BODONI_INSTALLED=true
+fi
+if [ -f "$FONTS_DIR/LibreBodoni[wght].ttf" ]; then
+    BODONI_INSTALLED=true
+fi
+if [ "$BODONI_INSTALLED" = false ]; then
+    echo -e "${BLUE}==>${NC} Installiere Libre Bodoni nach $FONTS_DIR..."
+    curl -fsSL "https://raw.githubusercontent.com/google/fonts/main/ofl/librebodoni/LibreBodoni%5Bwght%5D.ttf" -o "$FONTS_DIR/LibreBodoni[wght].ttf" 2>/dev/null || true
+    curl -fsSL "https://raw.githubusercontent.com/google/fonts/main/ofl/librebodoni/LibreBodoni-Italic%5Bwght%5D.ttf" -o "$FONTS_DIR/LibreBodoni-Italic[wght].ttf" 2>/dev/null || true
+    if command -v fc-cache &>/dev/null; then
+        fc-cache -f "$FONTS_DIR" &>/dev/null || true
+    fi
+    echo -e "${GREEN}==>${NC} Bodoni (Libre Bodoni) wurde erfolgreich eingerichtet."
+else
+    echo -e "${GREEN}==>${NC} Bodoni ist bereits vorhanden."
+fi
+
+# 3h. Prüfe und installiere Schriftart Playfair Display
+echo -e "${BLUE}==>${NC} Prüfe Schriftart Playfair Display..."
+PLAYFAIR_INSTALLED=false
+if command -v typst &>/dev/null && typst fonts 2>/dev/null | grep -qi "Playfair Display"; then
+    PLAYFAIR_INSTALLED=true
+fi
+if [ -f "$FONTS_DIR/PlayfairDisplay[wght].ttf" ]; then
+    PLAYFAIR_INSTALLED=true
+fi
+if [ "$PLAYFAIR_INSTALLED" = false ]; then
+    echo -e "${BLUE}==>${NC} Installiere Playfair Display nach $FONTS_DIR..."
+    curl -fsSL "https://raw.githubusercontent.com/google/fonts/main/ofl/playfairdisplay/PlayfairDisplay%5Bwght%5D.ttf" -o "$FONTS_DIR/PlayfairDisplay[wght].ttf" 2>/dev/null || true
+    curl -fsSL "https://raw.githubusercontent.com/google/fonts/main/ofl/playfairdisplay/PlayfairDisplay-Italic%5Bwght%5D.ttf" -o "$FONTS_DIR/PlayfairDisplay-Italic[wght].ttf" 2>/dev/null || true
+    if command -v fc-cache &>/dev/null; then
+        fc-cache -f "$FONTS_DIR" &>/dev/null || true
+    fi
+    echo -e "${GREEN}==>${NC} Playfair Display wurde erfolgreich eingerichtet."
+else
+    echo -e "${GREEN}==>${NC} Playfair Display ist bereits vorhanden."
+fi
+
+# 3i. Prüfe und installiere Schriftart Oswald
+echo -e "${BLUE}==>${NC} Prüfe Schriftart Oswald..."
+OSWALD_INSTALLED=false
+if command -v typst &>/dev/null && typst fonts 2>/dev/null | grep -qi "Oswald"; then
+    OSWALD_INSTALLED=true
+fi
+if [ -f "$FONTS_DIR/Oswald[wght].ttf" ]; then
+    OSWALD_INSTALLED=true
+fi
+if [ "$OSWALD_INSTALLED" = false ]; then
+    echo -e "${BLUE}==>${NC} Installiere Oswald nach $FONTS_DIR..."
+    curl -fsSL "https://raw.githubusercontent.com/google/fonts/main/ofl/oswald/Oswald%5Bwght%5D.ttf" -o "$FONTS_DIR/Oswald[wght].ttf" 2>/dev/null || true
+    if command -v fc-cache &>/dev/null; then
+        fc-cache -f "$FONTS_DIR" &>/dev/null || true
+    fi
+    echo -e "${GREEN}==>${NC} Oswald wurde erfolgreich eingerichtet."
+else
+    echo -e "${GREEN}==>${NC} Oswald ist bereits vorhanden."
+fi
+
 # 4. Prüfe und installiere DeepL Python-Bibliothek
 echo -e "${BLUE}==>${NC} Prüfe DeepL-Bibliothek..."
 if ! python3 -c "import deepl" &>/dev/null; then

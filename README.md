@@ -28,7 +28,7 @@ curl -fsSL https://raw.githubusercontent.com/jonathank55/txt2pdf/main/install.sh
 - Python 3 (standardmäßig vorinstalliert)
 - Typst (`brew install typst`)
 - DeepL Python-Bibliothek (`pip install deepl`, wird von `install.sh` automatisch eingerichtet)
-- Schriftarten: Garamond (EB Garamond, Cormorant Garamond), Times New Roman, PT Serif, Optima, Didot, Cochin, Big Caslon, Baskerville, Faustina, Canela Text, Roboto, Monaco (fehlende Kernschriften werden automatisch von `install.sh` oder `txt2pdf --install-fonts` installiert)
+- Schriftarten: Garamond (EB Garamond, Cormorant Garamond), Times New Roman, PT Serif, Optima, Didot, Cochin, Big Caslon, Baskerville, Bodoni, Playfair Display, Oswald, Faustina, Canela Text, Roboto, Monaco, Bookerly, Amazon Ember (fehlende Kernschriften werden automatisch von `install.sh` oder `txt2pdf --install-fonts` installiert)
 
 ## Verwendung
 
@@ -38,8 +38,8 @@ txt2pdf DATEI [OPTIONEN]
 
 ### Optionen
 
-- `-f FORMAT`  : Format-Vorgabe (`atk2` für 2-Spalten-Artikel mit Baskerville-Titel und Amazon Ember Autorenzeile [Standard], `atk1` für 3-Spalten-Artikel mit Didot-Titel, `br2` für 2-Spalten-Bericht mit PT Serif 10pt, `br1` für 1-Spalten-Bericht mit PT Serif 10pt, `apa` für 7. Edition APA-Bericht).
-- `-z SCHRIFT` : Schriftart wählen (`Garamond`, `Times New Roman`, `PT Serif`, `Optima`, `Didot`, `Cochin`, `Big Caslon`, `Baskerville`, `Faustina`, `Canela Text`, `Roboto`, `Monaco`).
+- `-f FORMAT`  : Format-Vorgabe (`atk2` für 2-Spalten-Artikel mit Bodoni-Titel und Amazon Ember Autorenzeile [Standard], `atk1` für 3-Spalten-Artikel mit Didot-Titel, `br2` für 2-Spalten-Bericht mit PT Serif 10pt, `br1` für 1-Spalten-Bericht mit PT Serif 10pt, `apa` für 7. Edition APA-Bericht).
+- `-z SCHRIFT` : Schriftart wählen (`Bodoni`, `Playfair Display`, `Oswald`, `Bookerly`, `Amazon Ember`, `Garamond`, `Times New Roman`, `PT Serif`, `Optima`, `Didot`, `Cochin`, `Big Caslon`, `Baskerville`, `Faustina`, `Canela Text`, `Roboto`, `Monaco`).
 - `-s GRÖßE`   : Fließtext-Größe (`6pt` bis `12pt`, Standard: 10pt bei `atk1`/`atk2`/`br1`/`br2`, 12pt bei `apa`).
 - `-r RÄNDER`  : Ränder (`k` für klein: 10mm x, 12mm y [Standard bei `atk1`/`atk2`]; `m` für mittel: 16mm x, 18mm y; `g` für groß: 22mm x, 24mm y [Standard bei `br2`]; `r` für riesig: 34mm x, 36mm y [Standard bei `br1`]; gilt für alle Formate außer `apa`).
 - `-i BILD`    : Abbildung einbinden (Syntax `##Pfad/zur/Datei` direkt im Textdokument verwenden).
