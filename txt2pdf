@@ -3790,16 +3790,10 @@ def convert_txt_to_pdf(
   font_size: none,
   above_gap: 2.8em,
   below_gap: 2.8em
-) = context {{
-  let pos = here().position()
-  let is_last_col = ({final_columns} == 1) or ({final_columns} == 2 and pos.x > 85mm) or ({final_columns} == 3 and pos.x > 120mm)
-  let space_left = 297mm - {margin_y} - pos.y
-  if is_last_col and space_left < 32mm {{
-    pagebreak()
-  }}
+) = {{
   let h_align = if align_center {{ center }} else {{ left }}
   let h_size = if font_size != none {{ font_size }} else {{ {final_font_size} }}
-  block(width: 100%, breakable: false, above: above_gap, below: below_gap)[
+  block(width: 100%, breakable: false, sticky: true, above: above_gap, below: below_gap)[
     #align(h_align)[
       #par(justify: false, leading: 0.38em)[
         #set text(hyphenate: false)
