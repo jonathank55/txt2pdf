@@ -17,9 +17,8 @@ Features:
 - Spaltenwahl: 3-Spalten (--3col, Standard), 2-Spalten (--2col) oder 1-Spalte (--1col).
 - Single-Occurrence Author Invariant: Der Autor wird ausnahmslos genau EINMAL unter dem Titel gerendert.
 - Automatische Bereinigung des Titels von Autorennennungen (' - Jonathan Klatchko' etc.).
-- Lead-Überschriften-Erkennung: Kurze Sätze ganz oben (< 250 Zeichen) werden automatisch als fette Lead-Überschrift formatiert (nur bei .txt/.md).
-- Zitat-Zwischenüberschriften: Zitate ('»...«', '„...“', '"..."') werden automatisch fett ausgezeichnet UND zentriert gerendert (nur bei .txt/.md).
-- Standard-Überschriften: Markdown (#, ##, ###) und Zählungen (1., 1.1) linksbündig fett ausgezeichnet.
+- Blocktextüberschriften am Anfang: Ein einzelner Absatz aus 1–2 Sätzen vor dem ersten Fließtextabsatz wird automatisch als bündige Blocktextüberschrift formatiert.
+- Zentrierte Überschriften: Ausschließlich bei führender Markdown-Raute ('#', '##', etc.) anerkannt und zentriert gerendert.
 - Intelligente Bildplatzierung via --img (semantisches Keyword-Matching).
 - Automatisches Literaturverzeichnis (APA 7).
 """
@@ -141,37 +140,12 @@ def apply_initial_to_typst_element(content: str, font_spec: str = None) -> str:
         f")[{s}]"
     )
 
-def is_heading_sentence(text: str) -> bool:
-    """Erkennt deterministisch, ob ein Absatz aus einem einzelnen Satz oder einer kurzen Phrase (mit oder ohne Punkt) als Überschrift besteht."""
-    s = text.strip()
-    if not s or len(s) > 350:
-        return False
-    if is_apa_citation(s):
-        return False
-    if s.startswith(("http://", "https://", "www.", "doi:")) or re.match(r"^https?://", s):
-        return False
-    if any(s.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "weil ", "dass ", "wenn ", "obwohl ", "währenddessen "]):
-        return False
-    # Wenn kein Satzendepunkt vorliegt
-    if not s.endswith((".", "!", "?", "...", ";", ":")):
-        return True
-    # Falls Punkt am Ende vorliegt: prüfen, ob es genau 1 Satz ist (keine internen Satzgrenzen)
-    clean = re.sub(
-        r"\b(?:z\. B\.|d\. h\.|u\. a\.|u\. ä\.|bzw\.|ca\.|evtl\.|inkl\.|Dr\.|Prof\.|Hr\.|Fr\.|Nr\.|Abs\.|Art\.|Vgl\.|vgl\.|S\.|ff\.|etc\.|e\.g\.|i\.e\.)",
-        "ABBR",
-        s,
-        flags=re.IGNORECASE
-    )
-    inner = clean[:-1].strip()
-    internal_boundaries = re.findall(r"[\.\!\?]\s+[A-ZÄÖÜ]", inner)
-    return len(internal_boundaries) == 0
-
-def is_single_sentence(text: str) -> bool:
-    """Erkennt deterministisch, ob ein Absatz aus genau 1 Satz mit Punkt am Ende besteht."""
+def is_one_or_two_sentences(text: str) -> bool:
+    """Erkennt deterministisch, ob ein Absatz aus 1 bis 2 Sätzen mit Punkt am Ende besteht."""
     s = text.strip()
     if not s.endswith((".", "!", "?")):
         return False
-    if len(s) < 10 or len(s) > 350:
+    if len(s) < 10 or len(s) > 500:
         return False
     clean = re.sub(
         r"\b(?:z\. B\.|d\. h\.|u\. a\.|u\. ä\.|bzw\.|ca\.|evtl\.|inkl\.|Dr\.|Prof\.|Hr\.|Fr\.|Nr\.|Abs\.|Art\.|Vgl\.|vgl\.|S\.|ff\.|etc\.|e\.g\.|i\.e\.)",
@@ -181,7 +155,7 @@ def is_single_sentence(text: str) -> bool:
     )
     inner = clean[:-1].strip()
     internal_boundaries = re.findall(r"[\.\!\?]\s+[A-ZÄÖÜ]", inner)
-    return len(internal_boundaries) == 0
+    return len(internal_boundaries) <= 1
 
 def is_author_name(candidate: str) -> bool:
     """Prüft zuverlässig, ob eine Zeichenkette den Namen einer realen Person / Autors darstellt."""
@@ -1965,10 +1939,6 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
     has_explicit_bibliography = False
     last_element_was_body_para = False
 
-    chapter_header_regex = re.compile(
-        r"^(?:KAPITEL|Kapitel|CHAPTER|Chapter|ABSCHNITT|Abschnitt|SECTION|Section|TEIL|Teil|MODUL|Modul|LEKTION|Lektion|THEMA|Thema|EINHEIT|Einheit)\s+([0-9IVXLCDM]+|[A-Z])(?:\s*[:\-\.\–—]\s*(.*)|$)",
-        re.IGNORECASE
-    )
     numbered_header_regex = re.compile(r"^(\d+(?:\.\d+)*[\.:\)]\s+[A-ZÄÖÜ].*)$")
     roman_header_regex = re.compile(r"^([IVXLCDM]+[\.:\)]\s+[A-ZÄÖÜ].*)$")
     alpha_header_regex = re.compile(r"^([A-Z]\.\s+[A-ZÄÖÜ].*)$")
@@ -2015,80 +1985,21 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                 typst_elements.append(f"{top_v}{fig_code}")
                 continue
 
-        # 1. Zitat-Zwischenüberschriften (fett, bei atk/br2 zentriert, bei br1 im Blocktextformat)
-        is_quote_heading = (
-            len(flat_text) <= 280 and (
-                (flat_text.startswith("»") and flat_text.endswith("«")) or
-                (flat_text.startswith("„") and flat_text.endswith("“")) or
-                (flat_text.startswith('"') and flat_text.endswith('"')) or
-                (flat_text.startswith("“") and flat_text.endswith("”"))
-            )
-        )
-        if is_quote_heading:
-            escaped = format_content_to_typst(flat_text)
-            top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            if fmt == "br1":
-                typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped}]\n")
-            else:
-                typst_elements.append(
-                    f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped}]\n  ]\n]\n"
-                )
-            continue
-
-        # 2. Markdown-Blockquote (> ...)
+        # 1. Markdown-Blockquote (> ...)
         if first_line.startswith(">"):
             quote_text = " ".join(re.sub(r"^>\s*", "", l).strip() for l in lines_in_para)
             escaped_quote = format_content_to_typst(quote_text)
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            if fmt in ("br1", "br2"):
-                typst_elements.append(
-                    f"{top_v}#block(inset: (left: 2.5mm), stroke: (left: 1.5pt + rgb(\"#000000\")))"
-                    f"[#text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_quote}]]\n"
-                )
-            elif len(quote_text) <= 200:
-                typst_elements.append(
-                    f"{top_v}#align(center)[\n  #block(width: 95%)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_quote}]\n  ]\n]\n"
-                )
-            else:
-                typst_elements.append(
-                    f"{top_v}#block(inset: (left: 2.5mm), stroke: (left: 1.5pt + rgb(\"#000000\")))"
-                    f"[#text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_quote}]]\n"
-                )
+            typst_elements.append(
+                f"{top_v}#block(inset: (left: 2.5mm), stroke: (left: 1.5pt + rgb(\"#000000\")))"
+                f"[#text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_quote}]]\n"
+            )
             continue
 
-        # 3. Markdown-Überschriften (#, ##, ###, ####)
-        if first_line.startswith("#### "):
-            h_text = escape_typst_line(first_line[5:].strip())
-            top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            if fmt == "br1":
-                typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
-            else:
-                typst_elements.append(
-                    f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n"
-                )
-            continue
-        elif first_line.startswith("### "):
-            h_text = escape_typst_line(first_line[4:].strip())
-            top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            if fmt == "br1":
-                typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
-            else:
-                typst_elements.append(
-                    f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n"
-                )
-            continue
-        elif first_line.startswith("## "):
-            h_text = escape_typst_line(first_line[3:].strip())
-            top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            if fmt == "br1":
-                typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
-            else:
-                typst_elements.append(
-                    f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n"
-                )
-            continue
-        elif first_line.startswith("# "):
-            h_text = escape_typst_line(first_line[2:].strip())
+        # 2. Markdown-Überschriften (#, ##, ###, ####, #####, ######) - Zentriert ausschließlich bei führendem '#'
+        m_heading = re.match(r"^(#{1,6})\s+(.+)$", first_line)
+        if m_heading:
+            h_text = escape_typst_line(m_heading.group(2).strip())
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
             if fmt == "br1":
                 typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
@@ -2098,19 +2009,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                 )
             continue
 
-        # 4. Explizite Kapitel- / Abschnittsüberschriften (KAPITEL 1: ..., Chapter 2 ...)
-        if is_single_line and len(first_line) <= 160 and chapter_header_regex.match(first_line):
-            h_text = escape_typst_line(first_line)
-            top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            if fmt == "br1":
-                typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
-            else:
-                typst_elements.append(
-                    f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n"
-                )
-            continue
-
-        # 5. Nummerierte & alphabetische Gliederungsüberschriften (1. ..., 1.1 ..., I. ..., A. ...)
+        # 3. Nummerierte & alphabetische Gliederungsüberschriften (1. ..., 1.1 ..., I. ..., A. ...)
         is_numbered_heading = is_single_line and len(first_line) <= 120 and (
             numbered_header_regex.match(first_line) or
             roman_header_regex.match(first_line) or
@@ -2122,7 +2021,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
             continue
 
-        # 6. Literaturverzeichnis-Abschnittsüberschrift oder reiner Bibliografie-Block
+        # 4. Literaturverzeichnis-Abschnittsüberschrift oder reiner Bibliografie-Block
         def is_source_line_check(line_str: str) -> bool:
             s_l = line_str.strip()
             if not s_l:
@@ -2157,7 +2056,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                     explicit_bib_entries.append(remainder)
             continue
 
-        # 7. APA-Zitate / Literaturangaben / reine URL-Blöcke (werden isoliert für die Extraseite gesammelt)
+        # 5. APA-Zitate / Literaturangaben / reine URL-Blöcke (werden isoliert für die Extraseite gesammelt)
         if in_bibliography_section or is_apa_citation(flat_text) or is_all_urls:
             in_bibliography_section = True
             has_explicit_bibliography = True
@@ -2173,21 +2072,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                     explicit_bib_entries.append(l)
             continue
 
-        # 8. Versalien-Überschriften (ALL CAPS / Großbuchstaben) -> Große Überschrift: bei atk/br2 zentriert, bei br1 im Blocktextformat
-        alpha_chars = re.findall(r"[A-Za-zÄÖÜäöüß]", flat_text)
-        is_all_caps = len(alpha_chars) >= 3 and flat_text.isupper() and len(flat_text) <= 200 and len(flat_text.split()) <= 20
-        if is_all_caps:
-            h_text = escape_typst_line(flat_text)
-            top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            if fmt == "br1":
-                typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
-            else:
-                typst_elements.append(
-                    f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n"
-                )
-            continue
-
-        # 9. Aufzählungspunkte
+        # 6. Aufzählungspunkte
         if first_line.startswith(("- ", "* ", "• ")):
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
             list_lines = []
@@ -2197,16 +2082,29 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             typst_elements.append(f"{top_v}{''.join(list_lines)}")
             continue
 
-        # 10. Überschriften: Alle einzelnen Sätze oder Phrasen (mit oder ohne Punkt) werden als Überschrift erkannt (bei atk/br2 zentriert, bei br1 im Blocktextformat)
-        if is_heading_sentence(flat_text):
+        # 7. Blocktextüberschrift:
+        # AUSSCHLIESSLICH AM ANFANG vor dem ersten Fließtextabsatz: 1-2 Sätze mit Punkt am Ende.
+        # Sobald eine Blocktextüberschrift oder der erste Fließtextabsatz verarbeitet wurde,
+        # darf im gesamten restlichen Dokument KEINE Blocktextüberschrift mehr vorkommen!
+        is_heading_2 = False
+        if not heading_2_done and not first_body_para_done:
+            valid_sentence_structure = is_one_or_two_sentences(flat_text)
+            is_heading_2 = (
+                valid_sentence_structure and
+                15 <= len(flat_text) <= 500 and
+                len(lines_in_para) <= 6 and
+                not is_apa_citation(flat_text) and
+                not flat_text.startswith(("http://", "https://", "www.", "doi:")) and
+                not re.match(r"^https?://", flat_text) and
+                not any(flat_text.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "dass "])
+            )
+        if is_heading_2:
+            heading_2_done = True
             h_text = format_content_to_typst(flat_text)
             top_v = "#v(0.8em)\n" if (para_has_blank_before and typst_elements) else ""
-            if fmt == "br1":
-                typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
-            else:
-                typst_elements.append(
-                    f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n"
-                )
+            typst_elements.append(
+                f"{top_v}#par(justify: true)[\n  #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n]\n"
+            )
             continue
 
         # 11. Regulärer Fließtextabsatz (Standard mit optionalem Initial im 1. Fließtext-Absatz)
@@ -2560,7 +2458,7 @@ def parse_rtf_to_typst(
             typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    #text(font: {title_font_spec}, size: {title_size}, weight: \"bold\", fill: rgb(\"#000000\"))[#strong[{t_inner}]]\n  ]\n]\n#v({v_title_gap})")
             continue
 
-        if idx == title_idx + 1 and (is_author_name(p_plain_clean) or p.get('align') == 'center' or p_plain_clean == extracted_author or bool(re.match(r"^(?:autor|author|von|by):\s*", p_plain_clean, re.I))):
+        if title_idx is not None and idx == title_idx + 1 and (is_author_name(p_plain_clean) or p.get('align') == 'center' or p_plain_clean == extracted_author or bool(re.match(r"^(?:autor|author|von|by):\s*", p_plain_clean, re.I))):
             if not extracted_author:
                 extracted_author = p_plain_clean
             typst_blocks.append(f"#align(center)[\n  #par(justify: false)[\n    #text(style: \"italic\", weight: \"regular\", fill: rgb(\"#000000\"))[{content}]\n  ]\n]\n#v(1.5mm)")
@@ -2603,47 +2501,40 @@ def parse_rtf_to_typst(
             rtf_bib_entries.append(content)
             continue
 
-        # Zitate in Anführungszeichen (bei atk/br2 zentriert, bei br1 im Blocktextformat)
-        is_quote = (
-            len(p_plain_clean) <= 350 and (
-                (p_plain_clean.startswith("»") and p_plain_clean.endswith("«")) or
-                (p_plain_clean.startswith("„") and p_plain_clean.endswith("“")) or
-                (p_plain_clean.startswith('"') and p_plain_clean.endswith('"')) or
-                (p_plain_clean.startswith("“") and p_plain_clean.endswith("”"))
-            )
-        )
-        if is_quote:
-            t_content = content
-            if not t_content.startswith("#strong["):
-                t_content = f"#strong[{t_content}]"
-            top_v = "#v(0.8em)\n" if (p.get('has_blank_before') and typst_blocks) else ""
-            if fmt == "br1":
-                typst_blocks.append(f"{top_v}#text(fill: rgb(\"#000000\"))[{t_content}]\n")
-            else:
-                typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(fill: rgb(\"#000000\"))[{t_content}]\n  ]\n]\n")
-            continue
-
-        # Fette Lead-Überschrift oder explizite Überschriften
         t_trimmed = content.strip()
         is_fully_bold = t_trimmed.startswith("#strong[") and t_trimmed.endswith("]")
-        is_lead_heading = (len(typst_blocks) <= 2) and is_fully_bold and len(p_plain_clean) <= 280
-        is_section_heading = is_fully_bold and len(p_plain_clean) <= 160
 
-        # Überschriften: Alle einzelnen Sätze oder Phrasen (mit oder ohne Punkt) werden als Überschrift erkannt (bei atk/br2 zentriert, bei br1 im Blocktextformat)
-        is_heading_sentence_rtf = is_heading_sentence(p_plain_clean)
+        # Blocktextüberschrift:
+        # AUSSCHLIESSLICH AM ANFANG vor dem ersten Fließtextabsatz: 1-2 Sätze mit Punkt am Ende.
+        is_heading_2 = False
+        if not heading_2_done and not first_body_para_done:
+            valid_sentence_rtf = is_one_or_two_sentences(p_plain_clean)
+            is_heading_2 = (
+                valid_sentence_rtf and
+                15 <= len(p_plain_clean) <= 500 and
+                not is_apa_citation(p_plain_clean) and
+                not any(p_plain_clean.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "dass "])
+            )
 
         top_v = "#v(0.8em)\n" if (p.get('has_blank_before') and typst_blocks) else ""
+
+        is_md_heading = bool(re.match(r"^#{1,6}\s+", p_plain_clean))
 
         if p['align'] == 'center':
             typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    {content}\n  ]\n]")
         elif p['align'] == 'right':
             typst_blocks.append(f"{top_v}#align(right)[\n  #par(justify: false)[\n    {content}\n  ]\n]")
-        elif p['heading'] or is_section_heading or is_heading_sentence_rtf or is_lead_heading:
-            inner_c = t_trimmed[8:-1] if is_fully_bold else content
+        elif is_md_heading:
+            clean_h = re.sub(r"^#{1,6}\s+", "", p_plain_clean).strip()
+            escaped_h = format_content_to_typst(clean_h)
             if fmt == "br1":
-                typst_blocks.append(f"{top_v}#strong[{inner_c}]\n")
+                typst_blocks.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_h}]\n")
             else:
-                typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #strong[{inner_c}]\n  ]\n]\n")
+                typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_h}]\n  ]\n]\n")
+        elif is_heading_2:
+            heading_2_done = True
+            inner_c = t_trimmed[8:-1] if is_fully_bold else content
+            typst_blocks.append(f"{top_v}#par(justify: true)[\n  #strong[{inner_c}]\n]\n")
         else:
             if use_initial and not first_body_para_done:
                 content_init = apply_initial_to_typst_element(content, font_spec=title_font_spec)
@@ -2982,7 +2873,7 @@ def convert_txt_to_apa_standalone(
         is_h = (not flat.endswith((".", "...", ";")) and len(flat) <= 300 and len(lines_in_para) <= 3 and
                 not any(flat.lower().startswith(w) for w in ["und ", "oder ", "aber ", "denn ", "weil ", "dass ", "wenn ", "obwohl "]))
 
-        if flat.startswith("# ") or (flat.isupper() and len(flat) <= 120):
+        if flat.startswith("# "):
             esc_h = format_content_to_typst(re.sub(r"^#+\s*", "", flat))
             elements.append(f"\n#align(center)[#text(weight: \"bold\")[{esc_h}]]\n")
         elif is_h or flat.startswith("## "):
