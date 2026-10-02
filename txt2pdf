@@ -1598,7 +1598,9 @@ def resolve_font_spec(font_arg: str = None, fmt: str = "atk2") -> Tuple[str, str
         return FONT_DEFINITIONS["faustina"]["spec"], "Faustina"
     elif fmt in ("atk1", "atk", "artikel1", "artikel"):
         return FONT_DEFINITIONS["garamond"]["spec"], "Garamond"
-    elif fmt in ("br2", "br1"):
+    elif fmt in ("br2", "bericht2"):
+        return FONT_DEFINITIONS["bookerly"]["spec"], "Bookerly"
+    elif fmt in ("br1", "bericht1"):
         return FONT_DEFINITIONS["pt serif"]["spec"], "PT Serif"
     elif fmt == "mdrn":
         return FONT_DEFINITIONS["lucida grande"]["spec"], "Lucida Grande"
@@ -2139,7 +2141,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         flat_text = " ".join(l.strip() for l in lines_in_para).strip()
         is_single_line = (len(lines_in_para) == 1)
 
-        if last_element_was_heading and fmt in ("atk1", "atk2"):
+        if last_element_was_heading:
             top_v = ""
             last_element_was_heading = False
         elif blank_before > 0 and typst_elements:
@@ -2708,7 +2710,7 @@ def parse_rtf_to_typst(
 
         empty_count = p.get('empty_paragraphs_before', 0)
         mb_pt = p.get('margin_bottom_pt', 0.0)
-        if last_element_was_heading and fmt in ("atk1", "atk2"):
+        if last_element_was_heading:
             top_v = ""
             last_element_was_heading = False
         elif empty_count > 0 and typst_blocks:
@@ -3344,7 +3346,7 @@ def convert_txt_to_pdf(
         final_initial = use_initial if use_initial is not None else True
         final_gutter = gutter if gutter is not None else "5.5mm"
         final_font_size = font_size if font_size is not None else "10pt"
-        default_leading = "0.42em"
+        default_leading = "0.55em"
     elif fmt == "atk2":
         # Format atk2: Kindle-Referenzformat, 3 Spalten, Faustina, Titel zentriert in Textschriftart,
         # Zwischenüberschriften via # in Amazon Ember zentriert, 3-Zeilen-Initial in regulärer Textschriftart, keine Trennlinie,
@@ -3365,13 +3367,13 @@ def convert_txt_to_pdf(
         final_initial = use_initial if use_initial is not None else False
         final_gutter = gutter if gutter is not None else "0mm"
         final_font_size = font_size if font_size is not None else "10pt"
-        default_leading = "0.48em"
-    else:  # br2 (Standard: 2 Spalten, 10pt Textgröße, PT Serif)
+        default_leading = "0.55em"
+    else:  # br2 (Standard: 2 Spalten, 10pt Textgröße, Bookerly)
         final_columns = columns if columns is not None else 2
         final_initial = use_initial if use_initial is not None else False
         final_gutter = gutter if gutter is not None else "6.0mm"
         final_font_size = font_size if font_size is not None else "10pt"
-        default_leading = "0.48em"
+        default_leading = "0.55em"
 
     if leading is not None:
         s_lead = str(leading).strip()
@@ -3911,7 +3913,7 @@ def main():
         f"Format: {BLUE}atk2{RESET} (Kindle-Format, 3 Spalten, Faustina, Autor in Amazon Ember, ohne Linie; Standard), "
         f"{BLUE}atk1{RESET} (Artikel, 3 Spalten, Garamond, mit Linie; Überschriften via # zentriert), "
         f"{BLUE}mdrn{RESET} (Modern, 2 Spalten, Lucida Grande, große Ränder; Überschriften via # zentriert), "
-        f"{BLUE}br2{RESET} (Bericht, 2 Spalten, PT Serif, 10pt; Überschriften via # im Blocktext), "
+        f"{BLUE}br2{RESET} (Bericht, 2 Spalten, Bookerly, 10pt; Überschriften via # im Blocktext), "
         f"{BLUE}br1{RESET} (Bericht, 1 Spalte, PT Serif, 10pt; Überschriften via # im Blocktext), "
         f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter). Überschriften werden nur anhand von '#' erkannt; Standard: {BLUE}atk2{RESET}"
     )
