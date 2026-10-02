@@ -3250,14 +3250,14 @@ def convert_txt_to_pdf(
         final_columns = columns if columns is not None else 1
         final_initial = use_initial if use_initial is not None else False
         final_gutter = gutter if gutter is not None else "0mm"
-        final_font_size = font_size if font_size is not None else "12pt"
-        default_leading = "0.42em"
-    else:  # br2 (Standard: 2 Spalten, 12pt Textgröße, Optima)
+        final_font_size = font_size if font_size is not None else "9pt"
+        default_leading = "0.48em"
+    else:  # br2 (Standard: 2 Spalten, 9pt Textgröße, PT Serif)
         final_columns = columns if columns is not None else 2
         final_initial = use_initial if use_initial is not None else False
         final_gutter = gutter if gutter is not None else "5.2mm"
-        final_font_size = font_size if font_size is not None else "12pt"
-        default_leading = "0.42em"
+        final_font_size = font_size if font_size is not None else "9pt"
+        default_leading = "0.48em"
 
     if leading is not None:
         s_lead = str(leading).strip()
@@ -3283,7 +3283,7 @@ def convert_txt_to_pdf(
 
     # Dynamische Schriftgrößen: 6pt bis 12pt (Hauptüberschrift bei atk1: 36pt, sonst +6pt, Bildunterschriften -2pt)
     m = re.search(r"([\d.]+)", str(final_font_size))
-    raw_pt = float(m.group(1)) if m else (10.0 if fmt in ("atk1", "atk2") else (9.0 if fmt == "mdrn" else 12.0))
+    raw_pt = float(m.group(1)) if m else (10.0 if fmt in ("atk1", "atk2") else 9.0)
     base_pt = max(6.0, min(raw_pt, 12.0))
     final_font_size = f"{base_pt:g}pt"
     if fmt == "atk1":
@@ -3621,7 +3621,8 @@ def convert_txt_to_pdf(
     if is_rtf:
         top_header_box = ""
 
-    word_spacing_directive = ",\n  spacing: 120%" if fmt == "atk2" else ""
+    # Wortabstand verbindlich für alle Formate (wie atk2 / Kindle) auf 120%
+    word_spacing_directive = ",\n  spacing: 120%"
 
     # Druckbare DIN-A4-Geometrie mit dynamischen Rändern (-r k | m | g)
     # Seitennummern nur bei mehrseitigen Dokumenten (total_pages > 1)
@@ -3762,11 +3763,11 @@ def main():
         f"Format: {BLUE}atk1{RESET} (Artikel, 3 Spalten, Garamond, mit Linie; Überschriften via # zentriert; Standard), "
         f"{BLUE}atk2{RESET} (Kindle-Format, 3 Spalten, Bookerly, Amazon Ember Titel zentriert, ohne Linie, mittlere Ränder), "
         f"{BLUE}mdrn{RESET} (Modern, 2 Spalten, Lucida Grande, große Ränder; Überschriften via # zentriert), "
-        f"{BLUE}br2{RESET} (Bericht, 2 Spalten, PT Serif; Überschriften via # im Blocktext), "
-        f"{BLUE}br1{RESET} (Bericht, 1 Spalte, PT Serif; Überschriften via # im Blocktext), "
+        f"{BLUE}br2{RESET} (Bericht, 2 Spalten, PT Serif, 9pt; Überschriften via # im Blocktext), "
+        f"{BLUE}br1{RESET} (Bericht, 1 Spalte, PT Serif, 9pt; Überschriften via # im Blocktext), "
         f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter). Überschriften werden nur anhand von '#' erkannt; Standard: {BLUE}atk1{RESET}"
     )
-    size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 10pt bei atk1/atk2, 9pt bei mdrn, 12pt bei br2/br1; entfällt bei apa)"
+    size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 10pt bei atk1/atk2, 9pt bei br2/br1/mdrn; entfällt bei apa)"
     font_help = (
         f"Schriftart ({BLUE}Garamond{RESET}, {BLUE}Bookerly{RESET}, {BLUE}Amazon Ember{RESET}, {BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, "
         f"{BLUE}Didot{RESET}, {BLUE}Cochin{RESET}, {BLUE}Big Caslon{RESET}, {BLUE}Baskerville{RESET}, {BLUE}Libre Baskerville{RESET}, "
