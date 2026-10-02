@@ -1578,15 +1578,15 @@ def resolve_title_font_spec(fmt: str, body_font_spec: str) -> str:
     """Löst die typografische Schriftartenspezifikation für die Hauptüberschrift (Titel) auf."""
     if fmt in ("atk1", "atk", "artikel1", "artikel"):
         return FONT_DEFINITIONS["didot"]["spec"]
-    if fmt in ("atk2", "artikel2"):
-        return FONT_DEFINITIONS["amazon ember"]["spec"]
     if fmt == "mdrn":
         return FONT_DEFINITIONS["avenir next"]["spec"]
     return body_font_spec
 
-def resolve_heading_font_spec(fmt: str, body_font_spec: str) -> str:
-    """Löst die typografische Schriftartenspezifikation für sämtliche Überschriften auf."""
-    return body_font_spec
+def resolve_heading_font_spec(fmt: str, body_font_spec: str = None) -> str:
+    """Löst die typografische Schriftartenspezifikation für sämtliche Zwischenüberschriften auf."""
+    if fmt in ("atk2", "artikel2"):
+        return FONT_DEFINITIONS["amazon ember"]["spec"]
+    return None
 
 def install_core_fonts() -> bool:
     """Überprüft und installiert fehlende Kernschriftarten (PT Serif, Roboto, GFS Didot, Libre Baskerville, Libre Caslon, EB Garamond, Cormorant Garamond, Faustina, Bookerly, Amazon Ember) für Typst."""
@@ -1840,7 +1840,7 @@ def format_lines_to_typst_paragraph(lines_in_para: List[str]) -> str:
             parts.append(esc)
         return " ".join(parts)
 
-def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str = "6pt", use_initial: bool = True, doc_dir: str = "", hanging_indent: str = "6mm", title_font_spec: str = None, fmt: str = "atk1") -> Tuple[str, List[str], List[str], str, bool]:
+def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str = "6pt", use_initial: bool = True, doc_dir: str = "", hanging_indent: str = "6mm", title_font_spec: str = None, heading_font_spec: str = None, fmt: str = "atk1") -> Tuple[str, List[str], List[str], str, bool]:
     """Wandelt Textzeilen in Typst-Code um, verarbeitet Überschriften, trennt APA-Zitate für die Extraseite und extrahiert Links."""
     full_raw_text = "\n".join(raw_lines)
     all_urls = extract_urls_from_text(full_raw_text)
@@ -2115,11 +2115,12 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         m_heading = re.match(r"^(#{1,6})\s+(.+)$", first_line)
         if m_heading:
             h_text = escape_typst_line(m_heading.group(2).strip())
+            font_attr = f"font: {heading_font_spec}, " if heading_font_spec else ""
             if fmt in ("br1", "br2"):
-                typst_elements.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
+                typst_elements.append(f"{top_v}#text({font_attr}weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n")
             else:
                 typst_elements.append(
-                    f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n"
+                    f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text({font_attr}weight: \"bold\", fill: rgb(\"#000000\"))[{h_text}]\n  ]\n]\n"
                 )
             continue
 
@@ -2492,6 +2493,7 @@ def parse_rtf_to_typst(
     use_initial: bool = True,
     hanging_indent: str = "6mm",
     title_font_spec: str = '("PT Serif", "EB Garamond", "Times New Roman")',
+    heading_font_spec: str = None,
     fmt: str = "br2"
 ) -> Tuple[str, List[str], str, str, str, List[str], str, bool]:
     """Konvertiert eine RTF- oder RTFD-Datei via textutil deterministisch unter vollständiger Wahrung der Formatierung."""
@@ -2633,10 +2635,11 @@ def parse_rtf_to_typst(
         elif is_md_heading:
             clean_h = re.sub(r"^#{1,6}\s+", "", p_plain_clean).strip()
             escaped_h = format_content_to_typst(clean_h)
+            font_attr = f"font: {heading_font_spec}, " if heading_font_spec else ""
             if fmt in ("br1", "br2"):
-                typst_blocks.append(f"{top_v}#text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_h}]\n{bot_v}")
+                typst_blocks.append(f"{top_v}#text({font_attr}weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_h}]\n{bot_v}")
             else:
-                typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text(weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_h}]\n  ]\n]\n{bot_v}")
+                typst_blocks.append(f"{top_v}#align(center)[\n  #par(justify: false)[\n    #text({font_attr}weight: \"bold\", fill: rgb(\"#000000\"))[{escaped_h}]\n  ]\n]\n{bot_v}")
         else:
             if use_initial and not first_body_para_done:
                 content_init = apply_initial_to_typst_element(content, font_spec=title_font_spec)
@@ -3232,9 +3235,9 @@ def convert_txt_to_pdf(
         final_font_size = font_size if font_size is not None else "10pt"
         default_leading = "0.42em"
     elif fmt == "atk2":
-        # Format atk2: Kindle-Referenzformat, 3 Spalten, Bookerly, Amazon Ember Titel zentriert,
-        # kein Initial, keine Trennlinie, Autor kursiv wie br2, Ränder mittel (16mm/18mm),
-        # Zeilenabstand 0.55em, Wortabstand 120%
+        # Format atk2: Kindle-Referenzformat, 3 Spalten, Bookerly, Titel zentriert in Textschriftart,
+        # Zwischenüberschriften via # in Amazon Ember zentriert, kein Initial, keine Trennlinie,
+        # Autor kursiv wie br2, Ränder mittel (16mm/18mm), Zeilenabstand 0.55em, Wortabstand 120%
         final_columns = columns if columns is not None else 3
         final_initial = use_initial if use_initial is not None else False
         final_gutter = gutter if gutter is not None else "4.8mm"
@@ -3297,6 +3300,7 @@ def convert_txt_to_pdf(
     selected_font = font if font is not None else font_family
     body_font_spec, chosen_font_name = resolve_font_spec(selected_font, fmt)
     title_font_spec = resolve_title_font_spec(fmt, body_font_spec)
+    heading_font_spec = resolve_heading_font_spec(fmt, body_font_spec)
 
     if is_rtf:
         body_text, urls, rtf_title, rtf_author, rtf_date, explicit_bib_entries, bib_heading_title, doc_has_indents = parse_rtf_to_typst(
@@ -3310,6 +3314,7 @@ def convert_txt_to_pdf(
             use_initial=final_initial,
             hanging_indent=hanging_indent,
             title_font_spec=title_font_spec,
+            heading_font_spec=heading_font_spec,
             fmt=fmt
         )
         extracted_title = rtf_title if rtf_title else None
@@ -3385,7 +3390,7 @@ def convert_txt_to_pdf(
             body_lines = translated_body
 
         body_text, urls, explicit_bib_entries, bib_heading_title, doc_has_indents = parse_body_to_typst(
-            body_lines, images=images, caption_size=caption_size, use_initial=final_initial, doc_dir=doc_dir, hanging_indent=hanging_indent, title_font_spec=title_font_spec, fmt=fmt
+            body_lines, images=images, caption_size=caption_size, use_initial=final_initial, doc_dir=doc_dir, hanging_indent=hanging_indent, title_font_spec=title_font_spec, heading_font_spec=heading_font_spec, fmt=fmt
         )
 
     if is_rtf:
@@ -3572,7 +3577,7 @@ def convert_txt_to_pdf(
 
         date_block = f'\n        #v(1.0mm)\n        #block[#text(size: 8pt, fill: rgb("#000000"))[{escape_typst_line(doc_date)}]]' if doc_date else ""
 
-        top_header_box = f"""// Vollbreite-Titelbox ohne Trennlinie (atk2: Amazon Ember zentriert, Autor kursiv wie br2)
+        top_header_box = f"""// Vollbreite-Titelbox ohne Trennlinie (atk2: Titel in Textschriftart zentriert, Autor kursiv wie br2)
 #place(top, scope: "parent", float: true)[
   #block(width: 100%, inset: (bottom: 3.5mm))[
     #align(center)[
@@ -3761,7 +3766,7 @@ def main():
 
     fmt_help = (
         f"Format: {BLUE}atk1{RESET} (Artikel, 3 Spalten, Garamond, mit Linie; Überschriften via # zentriert; Standard), "
-        f"{BLUE}atk2{RESET} (Kindle-Format, 3 Spalten, Bookerly, Amazon Ember Titel zentriert, Überschriften via # zentriert, ohne Linie, mittlere Ränder), "
+        f"{BLUE}atk2{RESET} (Kindle-Format, 3 Spalten, Bookerly, Titel zentriert, Zwischenüberschriften via # in Amazon Ember zentriert, ohne Linie, mittlere Ränder), "
         f"{BLUE}mdrn{RESET} (Modern, 2 Spalten, Lucida Grande, große Ränder; Überschriften via # zentriert), "
         f"{BLUE}br2{RESET} (Bericht, 2 Spalten, PT Serif, 9pt; Überschriften via # im Blocktext), "
         f"{BLUE}br1{RESET} (Bericht, 1 Spalte, PT Serif, 9pt; Überschriften via # im Blocktext), "
