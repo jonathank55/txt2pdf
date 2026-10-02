@@ -1765,7 +1765,7 @@ def generate_bibliography_typst(
 #v(0.6em)
 
 #show link: set text(fill: rgb("#0b57d0"))
-#set text(font: {font_spec}, size: {font_size}, costs: (hyphenation: 2000%))
+#set text(font: {font_spec}, size: {font_size}, hyphenate: true)
 #set par(
   hanging-indent: {par_hanging},
   leading: {leading},
@@ -3234,22 +3234,22 @@ def convert_txt_to_pdf(
     if fmt == "atk1":
         final_columns = columns if columns is not None else 3
         final_initial = use_initial if use_initial is not None else True
-        final_gutter = gutter if gutter is not None else "4.8mm"
+        final_gutter = gutter if gutter is not None else "5.5mm"
         final_font_size = font_size if font_size is not None else "10pt"
         default_leading = "0.42em"
     elif fmt == "atk2":
         # Format atk2: Kindle-Referenzformat, 3 Spalten, Bookerly, Titel zentriert in Textschriftart,
-        # Zwischenüberschriften via # in Amazon Ember zentriert, kein Initial, keine Trennlinie,
-        # Autor kursiv wie br2, Ränder mittel (16mm/18mm), Zeilenabstand 0.55em, Wortabstand 120%
+        # Zwischenüberschriften via # in Amazon Ember zentriert, Initial in Textschriftart, keine Trennlinie,
+        # Autor kursiv wie br2, Ränder mittel (16mm/18mm), Zeilenabstand 0.55em, Spaltensteg 5.5mm
         final_columns = columns if columns is not None else 3
-        final_initial = use_initial if use_initial is not None else False
-        final_gutter = gutter if gutter is not None else "4.8mm"
+        final_initial = use_initial if use_initial is not None else True
+        final_gutter = gutter if gutter is not None else "5.5mm"
         final_font_size = font_size if font_size is not None else "10pt"
         default_leading = "0.55em"
     elif fmt == "mdrn":
         final_columns = columns if columns is not None else 2
         final_initial = use_initial if use_initial is not None else False
-        final_gutter = gutter if gutter is not None else "5.2mm"
+        final_gutter = gutter if gutter is not None else "6.0mm"
         final_font_size = font_size if font_size is not None else "9pt"
         default_leading = "1.15em"
     elif fmt == "br1":
@@ -3261,7 +3261,7 @@ def convert_txt_to_pdf(
     else:  # br2 (Standard: 2 Spalten, 9pt Textgröße, PT Serif)
         final_columns = columns if columns is not None else 2
         final_initial = use_initial if use_initial is not None else False
-        final_gutter = gutter if gutter is not None else "5.2mm"
+        final_gutter = gutter if gutter is not None else "6.0mm"
         final_font_size = font_size if font_size is not None else "9pt"
         default_leading = "0.48em"
 
@@ -3630,8 +3630,7 @@ def convert_txt_to_pdf(
     if is_rtf:
         top_header_box = ""
 
-    # Wortabstand verbindlich für alle Formate (wie atk2 / Kindle) auf 120%
-    word_spacing_directive = ",\n  spacing: 120%"
+    word_spacing_directive = ""
 
     # Druckbare DIN-A4-Geometrie mit dynamischen Rändern (-r k | m | g)
     # Seitennummern nur bei mehrseitigen Dokumenten (total_pages > 1)
@@ -3659,8 +3658,7 @@ def convert_txt_to_pdf(
   font: {body_font_spec},
   size: {final_font_size},
   lang: "{effective_lang}",
-  hyphenate: true,
-  costs: (hyphenation: 2000%){word_spacing_directive}
+  hyphenate: true
 )
 
 #set par(
