@@ -212,8 +212,8 @@ def is_author_name(candidate: str) -> bool:
     }
 
     words = re.findall(r"[A-Za-zÄÖÜäöüß]+(?:-[A-Za-zÄÖÜäöüß]+)?|\b[A-ZÄÖÜ]\.", s_clean)
-    # Mindestens 2 Wörter (Vor- + Nachname) für nicht-explizit bekannte Namen
-    if not (2 <= len(words) <= 5):
+    # 1 bis 5 Wörter (z. B. Einzelname, Vor- + Nachname, Namenszusätze)
+    if not (1 <= len(words) <= 5):
         return False
 
     for w in words:
@@ -227,7 +227,7 @@ def is_author_name(candidate: str) -> bool:
     return True
 
 def parse_title_author_from_filename(base_name: str) -> Tuple[Optional[str], Optional[str]]:
-    """Extrahiert Titel und Autor deterministisch aus dem Dateinamen unter strikter Bewahrung aller Titel-Trennzeichen."""
+    """Extrahiert Titel und Autor deterministisch aus dem Dateinamen unter strikter Erkennung von ' - NAME' und ' / NAME'."""
     doc_prefixes = {
         "artikel", "aufsatz", "bericht", "essay", "notiz", "notizen", "entwurf", "text", 
         "dokument", "paper", "report", "draft", "article", "kolumne", "kommentar", "manuskript"
@@ -243,8 +243,8 @@ def parse_title_author_from_filename(base_name: str) -> Tuple[Optional[str], Opt
         if is_author_name(c1):
             return c2, c1
 
-    # 2. Autor am Ende: Titel [Trenner] Autor (gierig nach dem letzten Trenner vor dem Autor suchen)
-    m_end = re.search(r"^(.*)\s*(?:[:|]|\s+[-–—]\s+)\s*([^:|]+)$", base_name)
+    # 2. Autor am Ende: Titel [Trenner] Autor (" - NAME" oder " / NAME" sowie " : NAME" oder " | NAME")
+    m_end = re.search(r"^(.*?)(?:\s+[-–—]\s+|\s+/\s+|\s*/\s*|\s*[:|]\s+)\s*([^/\-:|]+)$", base_name)
     if m_end:
         t_cand = m_end.group(1).strip()
         a_cand = m_end.group(2).strip()
@@ -255,8 +255,8 @@ def parse_title_author_from_filename(base_name: str) -> Tuple[Optional[str], Opt
                 t_cand = m_p.group(1).strip()
             return (t_cand or None), a_cand
 
-    # 3. Autor am Anfang: Autor [Trenner] Titel
-    m_start = re.search(r"^([^:|]+)\s*(?:[:|]|\s+[-–—]\s+)\s*(.*?)$", base_name)
+    # 3. Autor am Anfang: Autor [Trenner] Titel ("NAME - Titel" oder "NAME / Titel")
+    m_start = re.search(r"^([^/\-:|]+?)(?:\s+[-–—]\s+|\s+/\s+|\s*/\s*|\s*[:|]\s+)\s*(.*?)$", base_name)
     if m_start:
         a_cand = m_start.group(1).strip()
         t_cand = m_start.group(2).strip()
@@ -2450,7 +2450,9 @@ def parse_rtf_to_typst(
 
         if idx == title_idx:
             t_content = content
-            if t_content.startswith("#strong[") and t_content.endswith("]"):
+            if expected_title:
+                t_inner = escape_typst_line(expected_title)
+            elif t_content.startswith("#strong[") and t_content.endswith("]"):
                 t_inner = t_content[8:-1]
             else:
                 t_inner = t_content
@@ -2549,6 +2551,17 @@ def parse_rtf_to_typst(
                 typst_blocks.append(content)
             first_body_para_done = True
 
+    # Falls kein Titelabsatz im RTF gefunden wurde, Dokumenttitel als Titelüberschrift voranstellen
+    if title_idx is None and expected_title:
+        doc_title_clean, _ = clean_title_and_author(expected_title)
+        if doc_title_clean:
+            v_title_gap = "1.8mm" if fmt == "atk1" else "1.4mm"
+            t_block = f"#align(center)[\n  #par(justify: false)[\n    #text(font: {title_font_spec}, size: {title_size}, weight: \"bold\", fill: rgb(\"#000000\"))[#strong[{escape_typst_line(doc_title_clean)}]]\n  ]\n]\n#v({v_title_gap})"
+            typst_blocks.insert(0, t_block)
+            if expected_author:
+                a_block = f"#align(center)[\n  #par(justify: false)[\n    #text(style: \"italic\", weight: \"regular\", fill: rgb(\"#000000\"))[{escape_typst_line(expected_author)}]\n  ]\n]\n#v(1.5mm)"
+                typst_blocks.insert(1, a_block)
+
     # Falls Bilder über -i übergeben wurden, diese am Ende anhängen
     if images:
         for img_p in images:
@@ -2592,7 +2605,7 @@ def clean_title_and_author(title: str, author: str = None, fallback_author: str 
 
     for a in unique_authors:
         pat_end = re.compile(
-            r"[\s\-_–—|:]*(?:(?:von|by|autor|author)\s+)?[\s\-_–—|:]*" + re.escape(a) + r"\s*$",
+            r"[\s\-_–—|:/]*(?:(?:von|by|autor|author)\s+)?[\s\-_–—|:/]*" + re.escape(a) + r"\s*$",
             re.IGNORECASE
         )
         if pat_end.search(cleaned_title):
@@ -2601,13 +2614,13 @@ def clean_title_and_author(title: str, author: str = None, fallback_author: str 
             cleaned_title = pat_end.sub("", cleaned_title)
 
         pat_mid = re.compile(
-            r"[\s\-_–—|:]+(?:(?:von|by|autor|author)\s+)?" + re.escape(a) + r"[\s\-_–—|:]+",
+            r"[\s\-_–—|:/]+(?:(?:von|by|autor|author)\s+)?" + re.escape(a) + r"[\s\-_–—|:/]+",
             re.IGNORECASE
         )
         cleaned_title = pat_mid.sub(" ", cleaned_title)
 
-    # Prüfe auch Trenner am Titelende nach unbekannten Autoren
-    m_sep = re.search(r"^(.*?)\s*(?:[:|]|\s[-–—]\s|(?:,\s*)?\b(?:von|by|autor|author)\b)\s*(.+)$", cleaned_title, re.IGNORECASE)
+    # Prüfe auch Trenner am Titelende nach unbekannten Autoren (" - NAME" oder " / NAME")
+    m_sep = re.search(r"^(.*?)(?:\s+[-–—]\s+|\s+/\s+|\s*/\s*|\s*[:|]\s+|(?:,\s*)?\b(?:von|by|autor|author)\b\s*)([A-Za-zÄÖÜäöüß][^/\-:|]*)$", cleaned_title, re.IGNORECASE)
     if m_sep:
         t_cand, a_cand = m_sep.group(1).strip(), m_sep.group(2).strip()
         if is_author_name(a_cand):
@@ -2619,7 +2632,7 @@ def clean_title_and_author(title: str, author: str = None, fallback_author: str 
             if not final_author:
                 final_author = t_cand
 
-    cleaned_title = re.sub(r"[\s\-_–—|:]+$", "", cleaned_title).strip()
+    cleaned_title = re.sub(r"[\s\-_–—|:/]+$", "", cleaned_title).strip()
     if not cleaned_title:
         cleaned_title = title.strip()
 
@@ -2767,12 +2780,13 @@ def convert_txt_to_apa_standalone(
         raw_content = f.read()
 
     file_title, file_author = parse_title_author_from_filename(base_name)
-    known_title = title or file_title
+    known_title = title or file_title or base_name
     ext_title, ext_author, ext_date, body_lines = extract_metadata_and_body(
         raw_content, default_author=author, default_date=date, known_title=known_title
     )
 
-    doc_title = title or file_title or ext_title or base_name
+    # Dokumenttitel als Titelüberschrift immer verwenden
+    doc_title = title or file_title or base_name
     doc_author = author or file_author or ext_author or "Jonathan Klatchko"
     doc_date = date or ext_date or time.strftime("%B %d, %Y")
 
@@ -3150,7 +3164,7 @@ def convert_txt_to_pdf(
     if is_rtf:
         body_text, urls, rtf_title, rtf_author, rtf_date, explicit_bib_entries, bib_heading_title, doc_has_indents = parse_rtf_to_typst(
             abs_input,
-            expected_title=title or file_title_candidate,
+            expected_title=title or file_title_candidate or base_name,
             expected_author=author or file_author_candidate,
             expected_date=date,
             images=images,
@@ -3169,12 +3183,13 @@ def convert_txt_to_pdf(
             raw_content = f.read()
 
         doc_dir = os.path.dirname(abs_input)
-        known_title = title or file_title_candidate
+        known_title = title or file_title_candidate or base_name
         extracted_title, extracted_author, extracted_date, body_lines = extract_metadata_and_body(
             raw_content, default_author=author, default_date=date, known_title=known_title
         )
 
-        raw_title = title if title else (file_title_candidate if file_title_candidate else (extracted_title if extracted_title else base_name))
+        # Dokumenttitel als Titelüberschrift immer verwenden (Dateiname bereinigt von Autoren- und Dokumenttypanhängen oder explizites -t)
+        raw_title = title if title else (file_title_candidate if file_title_candidate else base_name)
         target_author = author if author else (file_author_candidate if file_author_candidate else extracted_author)
         doc_date = date if date else extracted_date
 
@@ -3237,7 +3252,7 @@ def convert_txt_to_pdf(
         )
 
     if is_rtf:
-        raw_title = title if title else (file_title_candidate if file_title_candidate else (extracted_title if extracted_title else base_name))
+        raw_title = title if title else (file_title_candidate if file_title_candidate else base_name)
         target_author = author if author else (file_author_candidate if file_author_candidate else extracted_author)
         doc_date = date if date else extracted_date
         doc_title, doc_author = clean_title_and_author(raw_title, target_author, fallback_author=file_author_candidate)
