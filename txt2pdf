@@ -1535,6 +1535,18 @@ FONT_DEFINITIONS = {
         "name": "Verdana",
         "spec": '("Verdana", "Trebuchet MS", "Helvetica Neue", "Arial")',
     },
+    "iowan old style": {
+        "name": "Iowan Old Style",
+        "spec": '("Iowan Old Style", "PT Serif", "Times New Roman")',
+    },
+    "iowan": {
+        "name": "Iowan Old Style",
+        "spec": '("Iowan Old Style", "PT Serif", "Times New Roman")',
+    },
+    "iowanoldstyle": {
+        "name": "Iowan Old Style",
+        "spec": '("Iowan Old Style", "PT Serif", "Times New Roman")',
+    },
     "bookerly": {
         "name": "Bookerly",
         "spec": '("Bookerly", "PT Serif", "Times New Roman")',
@@ -1630,7 +1642,7 @@ def install_core_fonts() -> bool:
     font_dir = os.path.join(home, "Library", "Fonts") if is_mac else os.path.join(home, ".local", "share", "fonts")
     os.makedirs(font_dir, exist_ok=True)
 
-    print("Prüfe Kernschriftarten für txt2pdf (Times New Roman, PT Serif, Optima, Roboto, Monaco, Didot, Cochin, Big Caslon, Baskerville, Garamond, Faustina, Bookerly, Amazon Ember)...")
+    print("Prüfe Kernschriftarten für txt2pdf (Times New Roman, PT Serif, Optima, Roboto, Monaco, Didot, Cochin, Big Caslon, Baskerville, Garamond, Faustina, Bookerly, Amazon Ember, Iowan Old Style)...")
 
     if is_mac and shutil.which("brew"):
         try:
@@ -1671,7 +1683,7 @@ def install_core_fonts() -> bool:
         "LibreBodoni-Italic[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/librebodoni/LibreBodoni-Italic%5Bwght%5D.ttf",
         "PlayfairDisplay[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/playfairdisplay/PlayfairDisplay%5Bwght%5D.ttf",
         "PlayfairDisplay-Italic[wght].ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/playfairdisplay/PlayfairDisplay-Italic%5Bwght%5D.ttf",
-        # Hinweis: Avenir Next, Lucida Grande, Gill Sans, Futura, Malayalam MN sind macOS-Systemschriften
+        # Hinweis: Avenir Next, Lucida Grande, Gill Sans, Futura, Malayalam MN, Iowan Old Style sind macOS-Systemschriften
         # und müssen nicht heruntergeladen werden – sie sind auf jedem Mac bereits verfügbar.
     }
 
@@ -4026,7 +4038,7 @@ def main():
     )
     size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 10pt bei atk1/atk3/br2/br1, 9pt bei atk2; entfällt bei apa)"
     font_help = (
-        f"Schriftart ({BLUE}Bookerly{RESET}, {BLUE}Amazon Ember{RESET}, {BLUE}Playfair Display{RESET}, {BLUE}Bodoni{RESET}, "
+        f"Schriftart ({BLUE}Bookerly{RESET}, {BLUE}Iowan Old Style{RESET}, {BLUE}Amazon Ember{RESET}, {BLUE}Playfair Display{RESET}, {BLUE}Bodoni{RESET}, "
         f"{BLUE}Garamond{RESET}, {BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, "
         f"{BLUE}Didot{RESET}, {BLUE}Cochin{RESET}, {BLUE}Big Caslon{RESET}, {BLUE}Baskerville{RESET}, {BLUE}Libre Baskerville{RESET}, "
         f"{BLUE}Faustina{RESET}, {BLUE}Canela Text{RESET}, {BLUE}Gill Sans{RESET}, {BLUE}Avenir Next{RESET}, {BLUE}Lucida Grande{RESET}, "
