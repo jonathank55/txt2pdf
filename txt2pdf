@@ -132,7 +132,7 @@ def format_content_to_typst(text: str) -> str:
 def convert_markdown_formatting_to_typst(text: str) -> str:
     return format_content_to_typst(text)
 
-def apply_initial_to_typst_element(content: str, font_spec: str = None, height: int = 4, weight: str = "bold") -> str:
+def apply_initial_to_typst_element(content: str, font_spec: str = None, height: int = 4, weight: str = "bold", gap: str = "2pt") -> str:
     """Wendet ein typografisches großes Initial (Drop Cap) via droplet mit der Titelschriftart auf den Beginn eines Typst-Fließtextblocks an."""
     s = content.strip()
     if not s or s.startswith("#dropcap") or s.startswith("#table") or s.startswith("- ") or s.startswith("#grid") or s.startswith("#align"):
@@ -142,6 +142,7 @@ def apply_initial_to_typst_element(content: str, font_spec: str = None, height: 
     return (
         f"#dropcap(\n"
         f"  height: {height},\n"
+        f"  gap: {gap},\n"
         f"  justify: true,\n"
         f"  transform: it => text(font: {initial_font}{weight_clause}, it)\n"
         f")[{s}]"
@@ -2296,7 +2297,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                 init_font = body_font_spec if body_font_spec else FONT_DEFINITIONS["bookerly"]["spec"]
             else:
                 init_font = title_font_spec
-            escaped_para = apply_initial_to_typst_element(escaped_para, font_spec=init_font, height=init_height, weight=init_weight)
+            escaped_para = apply_initial_to_typst_element(escaped_para, font_spec=init_font, height=init_height, weight=init_weight, gap="2pt")
             if top_v:
                 escaped_para = f"{top_v}{escaped_para}"
         else:
@@ -2774,7 +2775,7 @@ def parse_rtf_to_typst(
                     init_font = body_font_spec if body_font_spec else FONT_DEFINITIONS["bookerly"]["spec"]
                 else:
                     init_font = title_font_spec
-                content_init = apply_initial_to_typst_element(content, font_spec=init_font, height=init_height, weight=init_weight)
+                content_init = apply_initial_to_typst_element(content, font_spec=init_font, height=init_height, weight=init_weight, gap="2pt")
                 if top_v:
                     content_init = f"{top_v}{content_init}"
                 if bot_v:
