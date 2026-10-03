@@ -137,7 +137,7 @@ def apply_initial_to_typst_element(content: str, font_spec: str = None, height: 
     s = content.strip()
     if not s or s.startswith("#dropcap") or s.startswith("#table") or s.startswith("- ") or s.startswith("#grid") or s.startswith("#align"):
         return s
-    initial_font = font_spec if font_spec else FONT_DEFINITIONS["futura"]["spec"]
+    initial_font = font_spec if font_spec else FONT_DEFINITIONS["didot"]["spec"]
     weight_clause = f', weight: "{weight}"' if weight else ""
     return (
         f"#dropcap(\n"
@@ -1611,6 +1611,8 @@ def resolve_title_font_spec(fmt: str, body_font_spec: str) -> str:
     """Löst die typografische Schriftartenspezifikation für die Hauptüberschrift (Titel) auf."""
     if fmt in ("atk1", "atk", "artikel1", "artikel"):
         return FONT_DEFINITIONS["didot"]["spec"]
+    if fmt in ("atk3", "artikel3"):
+        return FONT_DEFINITIONS["futura"]["spec"]
     return body_font_spec
 
 def resolve_heading_font_spec(fmt: str, body_font_spec: str = None) -> str:
