@@ -142,7 +142,6 @@ def apply_initial_to_typst_element(content: str, font_spec: str = None, height: 
     return (
         f"#dropcap(\n"
         f"  height: {height},\n"
-        f"  gap: 5pt,\n"
         f"  justify: true,\n"
         f"  transform: it => text(font: {initial_font}{weight_clause}, it)\n"
         f")[{s}]"
@@ -2581,8 +2580,8 @@ def parse_rtf_to_typst(
     use_initial: bool = True,
     hanging_indent: str = "6mm",
     title_font_spec: str = '("PT Serif", "EB Garamond", "Times New Roman")',
-    heading_font_spec: str = None,
-    fmt: str = "br2"
+    fmt: str = "br2",
+    leading: str = "0.55em"
 ) -> Tuple[str, List[str], str, str, str, List[str], str, bool]:
     """Konvertiert eine RTF- oder RTFD-Datei via textutil deterministisch unter vollständiger Wahrung der Formatierung."""
     res = subprocess.run(
@@ -2770,13 +2769,13 @@ def parse_rtf_to_typst(
         if doc_title_clean:
             v_title_gap = "1.8mm" if fmt in ("atk1", "atk", "atk2") else "1.4mm"
             if fmt in ("br1", "br2"):
-                t_block = f"#show \"_\": \"_\" + sym.zws\n#show \"/\": \"/\" + sym.zws\n#align(left)[\n  #block(width: 100%)[\n    #par(justify: false, leading: 0.42em)[\n      #text(font: {title_font_spec}, size: {title_size}, weight: \"bold\", hyphenate: true, fill: rgb(\"#000000\"))[#strong[{escape_typst_line(doc_title_clean)}]]\n    ]\n  ]\n]\n#v({v_title_gap})"
+                t_block = f"#show \"_\": \"_\" + sym.zws\n#show \"/\": \"/\" + sym.zws\n#align(left)[\n  #block(width: 100%)[\n    #par(justify: false, leading: {leading})[\n      #text(font: {title_font_spec}, size: {title_size}, weight: \"bold\", hyphenate: false, fill: rgb(\"#000000\"))[#strong[{escape_typst_line(doc_title_clean)}]]\n    ]\n  ]\n]\n#v({v_title_gap})"
                 typst_blocks.insert(0, t_block)
                 if expected_author:
                     a_block = f"#align(left)[\n  #block[\n    #text(style: \"italic\", weight: \"regular\", fill: rgb(\"#000000\"))[{escape_typst_line(expected_author)}]\n  ]\n]\n#v(1.5mm)"
                     typst_blocks.insert(1, a_block)
             else:
-                t_block = f"#show \"_\": \"_\" + sym.zws\n#show \"/\": \"/\" + sym.zws\n#align(center)[\n  #block(width: 100%)[\n    #par(justify: false, leading: 0.42em)[\n      #text(font: {title_font_spec}, size: {title_size}, weight: \"bold\", hyphenate: true, fill: rgb(\"#000000\"))[#strong[{escape_typst_line(doc_title_clean)}]]\n    ]\n  ]\n]\n#v({v_title_gap})"
+                t_block = f"#show \"_\": \"_\" + sym.zws\n#show \"/\": \"/\" + sym.zws\n#align(center)[\n  #block(width: 100%)[\n    #par(justify: false, leading: {leading})[\n      #text(font: {title_font_spec}, size: {title_size}, weight: \"bold\", hyphenate: false, fill: rgb(\"#000000\"))[#strong[{escape_typst_line(doc_title_clean)}]]\n    ]\n  ]\n]\n#v({v_title_gap})"
                 typst_blocks.insert(0, t_block)
                 if expected_author:
                     a_block = f"#align(center)[\n  #par(justify: false)[\n    #text(style: \"italic\", weight: \"regular\", fill: rgb(\"#000000\"))[{escape_typst_line(expected_author)}]\n  ]\n]\n#v(1.5mm)"
@@ -3157,7 +3156,7 @@ def convert_txt_to_apa_standalone(
 #align(center)[
   #show "_": "_" + sym.zws
   #show "/": "/" + sym.zws
-  #text(weight: "bold", hyphenate: true)[{escape_typst_line(doc_title)}]
+  #text(weight: "bold", hyphenate: false)[{escape_typst_line(doc_title)}]
   #v(24pt)
   #text()[{escape_typst_line(doc_author)}]
   #linebreak()
@@ -3172,7 +3171,7 @@ def convert_txt_to_apa_standalone(
 #align(center)[
   #show "_": "_" + sym.zws
   #show "/": "/" + sym.zws
-  #text(weight: "bold", hyphenate: true)[{escape_typst_line(doc_title)}]
+  #text(weight: "bold", hyphenate: false)[{escape_typst_line(doc_title)}]
 ]
 #v(1.2em)
 
@@ -3422,7 +3421,8 @@ def convert_txt_to_pdf(
             hanging_indent=hanging_indent,
             title_font_spec=title_font_spec,
             heading_font_spec=heading_font_spec,
-            fmt=fmt
+            fmt=fmt,
+            leading=final_leading
         )
         extracted_title = rtf_title if rtf_title else None
         extracted_author = rtf_author if rtf_author else None
@@ -3655,7 +3655,7 @@ def convert_txt_to_pdf(
       let high = 120.0
       for _ in range(16) {{
         let mid = (low + high) / 2.0
-        let m = measure(text(font: {title_font_spec}, size: mid * 1pt, weight: "{title_weight}", hyphenate: true)[{title_strong_open}{escape_typst_line(doc_title)}{title_strong_close}])
+        let m = measure(text(font: {title_font_spec}, size: mid * 1pt, weight: "{title_weight}", hyphenate: false)[{title_strong_open}{escape_typst_line(doc_title)}{title_strong_close}])
         if m.width <= max-w {{
           low = mid
         }} else {{
@@ -3665,8 +3665,8 @@ def convert_txt_to_pdf(
       let best-sz = low * 1pt
       align(center)[
         #block(width: 100%)[
-          #par(justify: false, leading: 0.42em)[
-            #text(font: {title_font_spec}, size: best-sz, weight: "{title_weight}", hyphenate: true, fill: rgb("#000000"))[{title_strong_open}{escape_typst_line(doc_title)}{title_strong_close}]
+          #par(justify: false, leading: {final_leading})[
+            #text(font: {title_font_spec}, size: best-sz, weight: "{title_weight}", hyphenate: false, fill: rgb("#000000"))[{title_strong_open}{escape_typst_line(doc_title)}{title_strong_close}]
           ]
         ]
         {author_typst_inline}
@@ -3698,8 +3698,8 @@ def convert_txt_to_pdf(
     #show "/": "/" + sym.zws
     #align(center)[
       #block(width: 100%)[
-        #par(justify: false, leading: 0.42em)[
-          #text(font: {title_font_spec}, size: {title_size}, weight: "bold", hyphenate: true, fill: rgb("#000000"))[#strong[{escape_typst_line(doc_title)}]]
+        #par(justify: false, leading: {final_leading})[
+          #text(font: {title_font_spec}, size: {title_size}, weight: "bold", hyphenate: false, fill: rgb("#000000"))[#strong[{escape_typst_line(doc_title)}]]
         ]
       ]{author_block}{date_block}
     ]
@@ -3723,8 +3723,8 @@ def convert_txt_to_pdf(
       align: (left + horizon, right + horizon),
       [
         #block(width: 100%)[
-          #par(justify: false, leading: 0.42em)[
-            #text(font: {title_font_spec}, size: {title_size}, weight: "bold", hyphenate: true, fill: rgb("#000000"))[#strong[{escape_typst_line(doc_title)}]]
+          #par(justify: false, leading: {final_leading})[
+            #text(font: {title_font_spec}, size: {title_size}, weight: "bold", hyphenate: false, fill: rgb("#000000"))[#strong[{escape_typst_line(doc_title)}]]
           ]
         ]{author_block}
       ],
@@ -3735,8 +3735,8 @@ def convert_txt_to_pdf(
         else:
             header_content = f"""#align(left)[
       #block(width: 100%)[
-        #par(justify: false, leading: 0.42em)[
-          #text(font: {title_font_spec}, size: {title_size}, weight: "bold", hyphenate: true, fill: rgb("#000000"))[#strong[{escape_typst_line(doc_title)}]]
+        #par(justify: false, leading: {final_leading})[
+          #text(font: {title_font_spec}, size: {title_size}, weight: "bold", hyphenate: false, fill: rgb("#000000"))[#strong[{escape_typst_line(doc_title)}]]
         ]
       ]{author_block}
     ]"""
@@ -3807,8 +3807,10 @@ def convert_txt_to_pdf(
   let h_align = if align_center {{ center }} else {{ left }}
   let h_size = if font_size != none {{ font_size }} else {{ {final_font_size} }}
   block(width: 100%, breakable: false, sticky: true, above: above_gap, below: below_gap)[
+    #show "_": "_" + sym.zws
+    #show "/": "/" + sym.zws
     #align(h_align)[
-      #par(justify: false, leading: 0.38em)[
+      #par(justify: false, leading: {final_leading})[
         #set text(hyphenate: false)
         #{{
           if font_attr != none {{
