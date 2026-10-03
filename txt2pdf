@@ -1809,7 +1809,7 @@ def generate_bibliography_typst(
 {body}
 """
     elif fmt in ("br1", "br2"):
-        separator_typst = """#v(1.0em)\n#line(length: 100%, stroke: 0.3pt + rgb("#000000"))\n#v(0.6em)\n""" if show_rule else """#v(1.0em)\n"""
+        separator_typst = """#v(1.0em)\n"""
         header_block = f"""{separator_typst}#render_section_heading([{escape_typst_line(bib_title)}], align_center: false, font_attr: {bib_font_arg}, font_size: {title_size}, above_gap: 2.0em, below_gap: 1.0em)"""
         return f"""
 {header_block}
@@ -2148,6 +2148,8 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
 
         # 0. Explizite Trennlinie (======, ------, ___, ~~~, etc.) → native Typst-Linie
         if p_info.get("is_separator") or (is_single_line and re.match(r"^[=\-_*~]{3,}\s*$", flat_text)):
+            if fmt in ("br1", "br2"):
+                continue
             top_v = "#v(0.5em)\n" if typst_elements else ""
             typst_elements.append(f"{top_v}#line(length: 100%, stroke: 0.3pt + rgb(\"#000000\"))\n#v(0.5em)\n")
             continue
@@ -2701,6 +2703,9 @@ def parse_rtf_to_typst(
             in_bib_section = True
             has_explicit_bib = True
             rtf_bib_entries.append(content)
+            continue
+
+        if re.match(r"^[=\-_*~]{3,}\s*$", p_plain_clean):
             continue
 
         empty_count = p.get('empty_paragraphs_before', 0)
@@ -3612,7 +3617,7 @@ def convert_txt_to_pdf(
         hanging_indent=hanging_indent,
         leading=final_leading,
         use_body_indent=doc_has_indents,
-        show_rule=(fmt != "atk2"),
+        show_rule=(fmt not in ("atk2", "br1", "br2")),
         title_font_spec=bib_heading_font,
         fmt=fmt
     )
