@@ -2770,13 +2770,13 @@ def parse_rtf_to_typst(
         if doc_title_clean:
             v_title_gap = "1.8mm" if fmt in ("atk1", "atk", "atk2") else "1.4mm"
             if fmt in ("br1", "br2"):
-                t_block = f"#align(left)[\n  #block[\n    #text(font: {title_font_spec}, size: {title_size}, weight: \"bold\", fill: rgb(\"#000000\"))[#strong[{escape_typst_line(doc_title_clean)}]]\n  ]\n]\n#v({v_title_gap})"
+                t_block = f"#show \"_\": \"_\" + sym.zws\n#show \"/\": \"/\" + sym.zws\n#align(left)[\n  #block(width: 100%)[\n    #par(justify: false, leading: 0.42em)[\n      #text(font: {title_font_spec}, size: {title_size}, weight: \"bold\", hyphenate: true, fill: rgb(\"#000000\"))[#strong[{escape_typst_line(doc_title_clean)}]]\n    ]\n  ]\n]\n#v({v_title_gap})"
                 typst_blocks.insert(0, t_block)
                 if expected_author:
                     a_block = f"#align(left)[\n  #block[\n    #text(style: \"italic\", weight: \"regular\", fill: rgb(\"#000000\"))[{escape_typst_line(expected_author)}]\n  ]\n]\n#v(1.5mm)"
                     typst_blocks.insert(1, a_block)
             else:
-                t_block = f"#align(center)[\n  #par(justify: false)[\n    #text(font: {title_font_spec}, size: {title_size}, weight: \"bold\", fill: rgb(\"#000000\"))[#strong[{escape_typst_line(doc_title_clean)}]]\n  ]\n]\n#v({v_title_gap})"
+                t_block = f"#show \"_\": \"_\" + sym.zws\n#show \"/\": \"/\" + sym.zws\n#align(center)[\n  #block(width: 100%)[\n    #par(justify: false, leading: 0.42em)[\n      #text(font: {title_font_spec}, size: {title_size}, weight: \"bold\", hyphenate: true, fill: rgb(\"#000000\"))[#strong[{escape_typst_line(doc_title_clean)}]]\n    ]\n  ]\n]\n#v({v_title_gap})"
                 typst_blocks.insert(0, t_block)
                 if expected_author:
                     a_block = f"#align(center)[\n  #par(justify: false)[\n    #text(style: \"italic\", weight: \"regular\", fill: rgb(\"#000000\"))[{escape_typst_line(expected_author)}]\n  ]\n]\n#v(1.5mm)"
@@ -3155,7 +3155,9 @@ def convert_txt_to_apa_standalone(
 // APA 7 Student Title Page (Seite 1)
 #v(72pt)
 #align(center)[
-  #text(weight: "bold")[{escape_typst_line(doc_title)}]
+  #show "_": "_" + sym.zws
+  #show "/": "/" + sym.zws
+  #text(weight: "bold", hyphenate: true)[{escape_typst_line(doc_title)}]
   #v(24pt)
   #text()[{escape_typst_line(doc_author)}]
   #linebreak()
@@ -3168,7 +3170,9 @@ def convert_txt_to_apa_standalone(
 
 // Seite 2: Beginn des Aufsatzes mit zentriertem Titel
 #align(center)[
-  #text(weight: "bold")[{escape_typst_line(doc_title)}]
+  #show "_": "_" + sym.zws
+  #show "/": "/" + sym.zws
+  #text(weight: "bold", hyphenate: true)[{escape_typst_line(doc_title)}]
 ]
 #v(1.2em)
 
@@ -3643,13 +3647,15 @@ def convert_txt_to_pdf(
         top_header_box = f"""// Vollbreite-Titelbox mit Trennlinie ({fmt}: {title_font_spec[:20]}... maximal dynamisch, einzeilig, zentriert)
 #place(top, scope: "parent", float: true)[
   #block(width: 100%, inset: (bottom: 2.5mm))[
+    #show "_": "_" + sym.zws
+    #show "/": "/" + sym.zws
     #context {{
       let max-w = {max_title_w_val}mm
       let low = 10.0
       let high = 120.0
       for _ in range(16) {{
         let mid = (low + high) / 2.0
-        let m = measure(text(font: {title_font_spec}, size: mid * 1pt, weight: "{title_weight}")[{title_strong_open}{escape_typst_line(doc_title)}{title_strong_close}])
+        let m = measure(text(font: {title_font_spec}, size: mid * 1pt, weight: "{title_weight}", hyphenate: true)[{title_strong_open}{escape_typst_line(doc_title)}{title_strong_close}])
         if m.width <= max-w {{
           low = mid
         }} else {{
@@ -3658,7 +3664,11 @@ def convert_txt_to_pdf(
       }}
       let best-sz = low * 1pt
       align(center)[
-        #block[#text(font: {title_font_spec}, size: best-sz, weight: "{title_weight}", hyphenate: false, fill: rgb("#000000"))[{title_strong_open}{escape_typst_line(doc_title)}{title_strong_close}]]
+        #block(width: 100%)[
+          #par(justify: false, leading: 0.42em)[
+            #text(font: {title_font_spec}, size: best-sz, weight: "{title_weight}", hyphenate: true, fill: rgb("#000000"))[{title_strong_open}{escape_typst_line(doc_title)}{title_strong_close}]
+          ]
+        ]
         {author_typst_inline}
       ]
       // Dynamischer Abstand vor Trennlinie: proportional zur Titelgröße (Descender ~30%)
@@ -3684,8 +3694,14 @@ def convert_txt_to_pdf(
         top_header_box = f"""// Vollbreite-Titelbox ohne Trennlinie (atk2: Titel in Baskerville zentriert, Autor in Amazon Ember)
 #place(top, scope: "parent", float: true)[
   #block(width: 100%, inset: (bottom: 6.8mm))[
+    #show "_": "_" + sym.zws
+    #show "/": "/" + sym.zws
     #align(center)[
-      #block[#text(font: {title_font_spec}, size: {title_size}, weight: "bold", hyphenate: false, fill: rgb("#000000"))[#strong[{escape_typst_line(doc_title)}]]]{author_block}{date_block}
+      #block(width: 100%)[
+        #par(justify: false, leading: 0.42em)[
+          #text(font: {title_font_spec}, size: {title_size}, weight: "bold", hyphenate: true, fill: rgb("#000000"))[#strong[{escape_typst_line(doc_title)}]]
+        ]
+      ]{author_block}{date_block}
     ]
   ]
 ]
@@ -3706,7 +3722,11 @@ def convert_txt_to_pdf(
       gutter: 6mm,
       align: (left + horizon, right + horizon),
       [
-        #block[#text(font: {title_font_spec}, size: {title_size}, weight: "bold", fill: rgb("#000000"))[#strong[{escape_typst_line(doc_title)}]]]{author_block}
+        #block(width: 100%)[
+          #par(justify: false, leading: 0.42em)[
+            #text(font: {title_font_spec}, size: {title_size}, weight: "bold", hyphenate: true, fill: rgb("#000000"))[#strong[{escape_typst_line(doc_title)}]]
+          ]
+        ]{author_block}
       ],
       [
         #text(fill: rgb("#000000"))[{escape_typst_line(doc_date)}]
@@ -3714,12 +3734,18 @@ def convert_txt_to_pdf(
     )"""
         else:
             header_content = f"""#align(left)[
-      #block[#text(font: {title_font_spec}, size: {title_size}, weight: "bold", fill: rgb("#000000"))[#strong[{escape_typst_line(doc_title)}]]]{author_block}
+      #block(width: 100%)[
+        #par(justify: false, leading: 0.42em)[
+          #text(font: {title_font_spec}, size: {title_size}, weight: "bold", hyphenate: true, fill: rgb("#000000"))[#strong[{escape_typst_line(doc_title)}]]
+        ]
+      ]{author_block}
     ]"""
 
         top_header_box = f"""// Vollbreite-Titelbox ohne Trennlinie (Titel dynamisch: Textgröße + 6pt)
 #place(top, scope: "parent", float: true)[
   #block(width: 100%, inset: (bottom: 2.5mm))[
+    #show "_": "_" + sym.zws
+    #show "/": "/" + sym.zws
     {header_content}
   ]
 ]
