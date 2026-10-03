@@ -38,7 +38,7 @@ txt2pdf DATEI [OPTIONEN]
 
 ### Optionen
 
-- `-f FORMAT`  : Format-Vorgabe (`atk2` für Kindle-Format mit 3 Spalten, Faustina und Amazon Ember Autorenzeile [Standard], `atk1` für 3-Spalten-Artikel mit Didot-Titel [Ränder mittel], `atk3` für 2-Spalten-Artikel mit Bookerly, riesigen Rändern und Amazon Ember Überschriften/Autorenzeile, `br2` für 2-Spalten-Bericht mit Bookerly 10pt, `br1` für 1-Spalten-Bericht mit PT Serif 10pt, `apa` für 7. Edition APA-Bericht).
+- `-f FORMAT`  : Format-Vorgabe (`atk2` für Kindle-Format mit 3 Spalten, Faustina und Amazon Ember Autorenzeile [Standard], `atk1` für 3-Spalten-Artikel mit Didot-Titel [Ränder mittel], `atk3` für 2-Spalten-Artikel mit Bookerly 10pt, riesigen Rändern und Amazon Ember Überschriften/Autorenzeile, `br2` für 2-Spalten-Bericht mit Bookerly 10pt, `br1` für 1-Spalten-Bericht mit PT Serif 10pt, `apa` für 7. Edition APA-Bericht).
 - `-z SCHRIFT` : Schriftart wählen (`Bookerly`, `Amazon Ember`, `Playfair Display`, `Bodoni`, `Garamond`, `Times New Roman`, `PT Serif`, `Optima`, `Didot`, `Cochin`, `Big Caslon`, `Baskerville`, `Faustina`, `Canela Text`, `Roboto`, `Monaco`).
 - `-s GRÖßE`   : Fließtext-Größe (`6pt` bis `12pt`, Standard: 10pt bei `atk1`/`atk3`/`br1`/`br2`, 9pt bei `atk2`, 12pt bei `apa`).
 - `-r RÄNDER`  : Ränder (`m` für mittel: 16mm x, 18mm y [Standard bei `atk1`/`atk2`]; `k` für klein: 10mm x, 12mm y; `g` für groß: 22mm x, 24mm y [Standard bei `br2`]; `r` für riesig: 34mm x, 36mm y [Standard bei `br1`/`atk3`]; gilt für alle Formate außer `apa`).

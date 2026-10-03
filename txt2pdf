@@ -3401,7 +3401,7 @@ def convert_txt_to_pdf(
         default_leading = "0.55em"
     elif fmt == "atk3":
         # Format atk3: Artikel 3 (basiert auf br2), 2 Spalten, Bookerly (10pt), Ränder riesig (34mm/36mm),
-        # Titel linksbündig (Blocktext, +10pt = base_pt + 10pt), Autor in Amazon Ember linksbündig (wie bei atk2),
+        # Titel zentriert (+10pt = base_pt + 10pt), Autor in Amazon Ember zentriert (wie bei atk2),
         # Zwischenüberschriften zentriert in Amazon Ember (bold) mit größeren Abständen (2.8em/2.8em),
         # 3-Zeilen-Initial in Textschriftart (regular), Spaltensteg 6.0mm, Zeilenabstand 0.55em
         final_columns = columns if columns is not None else 2
@@ -4006,7 +4006,7 @@ def main():
     fmt_help = (
         f"Format: {BLUE}atk2{RESET} (Kindle-Format, 3 Spalten, Faustina, Autor in Amazon Ember, ohne Linie; Standard), "
         f"{BLUE}atk1{RESET} (Artikel, 3 Spalten, Garamond, mit Linie; Überschriften via # zentriert), "
-        f"{BLUE}atk3{RESET} (Artikel, 2 Spalten, Bookerly, Ränder riesig; Überschriften zentriert in Amazon Ember), "
+        f"{BLUE}atk3{RESET} (Artikel, 2 Spalten, Bookerly, 10pt, Ränder riesig; Überschriften zentriert in Amazon Ember), "
         f"{BLUE}br2{RESET} (Bericht, 2 Spalten, Bookerly, 10pt; Überschriften via # im Blocktext), "
         f"{BLUE}br1{RESET} (Bericht, 1 Spalte, PT Serif, 10pt; Überschriften via # im Blocktext), "
         f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter). Überschriften werden nur anhand von '#' erkannt; Standard: {BLUE}atk2{RESET}"
