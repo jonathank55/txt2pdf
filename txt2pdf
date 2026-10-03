@@ -2296,7 +2296,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             if fmt == "atk2":
                 init_font = FONT_DEFINITIONS["baskerville"]["spec"]
             elif fmt == "atk3":
-                init_font = body_font_spec if body_font_spec else FONT_DEFINITIONS["bookerly"]["spec"]
+                init_font = title_font_spec
             else:
                 init_font = title_font_spec
             escaped_para = apply_initial_to_typst_element(escaped_para, font_spec=init_font, height=init_height, weight=init_weight, gap="2pt")
@@ -2774,7 +2774,7 @@ def parse_rtf_to_typst(
                 if fmt == "atk2":
                     init_font = FONT_DEFINITIONS["baskerville"]["spec"]
                 elif fmt == "atk3":
-                    init_font = body_font_spec if body_font_spec else FONT_DEFINITIONS["bookerly"]["spec"]
+                    init_font = title_font_spec
                 else:
                     init_font = title_font_spec
                 content_init = apply_initial_to_typst_element(content, font_spec=init_font, height=init_height, weight=init_weight, gap="2pt")
