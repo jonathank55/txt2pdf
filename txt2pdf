@@ -137,7 +137,7 @@ def apply_initial_to_typst_element(content: str, font_spec: str = None, height: 
     s = content.strip()
     if not s or s.startswith("#dropcap") or s.startswith("#table") or s.startswith("- ") or s.startswith("#grid") or s.startswith("#align"):
         return s
-    initial_font = font_spec if font_spec else FONT_DEFINITIONS["didot"]["spec"]
+    initial_font = font_spec if font_spec else FONT_DEFINITIONS["futura"]["spec"]
     weight_clause = f', weight: "{weight}"' if weight else ""
     return (
         f"#dropcap(\n"
