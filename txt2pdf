@@ -2052,6 +2052,37 @@ def is_single_sentence(text: str) -> bool:
     return False
 
 
+def can_apply_initial(raw_lines: List[str], formatted_content: str = "") -> bool:
+    """
+    Prüft, ob ein Textabsatz für ein Initial (Drop Cap) qualifiziert ist:
+    1. ZWINGEND mehr als nur ein Satz (mindestens zwei vollständige Sätze).
+    2. Ein normaler, reiner Textabsatz ohne Formatierungselemente (keine Markdown-Auszeichnungen wie **, *, _, `, [], |, >, ##, etc.).
+    3. Keine Autoren-, Metadaten- oder Titelzeilen.
+    """
+    raw_text = "\n".join(raw_lines).strip()
+    if not raw_text:
+        return False
+    # Keine Formatierungselemente: **, __, *, _, `, ~~, |, [, ], <, >, ##, http
+    if re.search(r"[*_`#|\[\]<>]|https?://|##", raw_text):
+        return False
+    # Autorenzeilen oder Metadaten ausschließen
+    if is_author_name(raw_text):
+        return False
+    clean = re.sub(r"^#{1,6}\s*", "", raw_text).strip()
+    abbrev_pattern = r"\b(?:z\.?\s*B|d\.?\s*h|u\.?\s*a|bzw|etc|ca|vgl|usw|Dr|Prof|Nr|Aufl|vs|Inc|e\.?\s*V)\."
+    text_no_abbrev = re.sub(abbrev_pattern, "ABBR", clean, flags=re.IGNORECASE)
+    text_no_abbrev = re.sub(r"\b\d+\.\d+\b", "NUM", text_no_abbrev)
+    endings = list(re.finditer(r"[.!?]+(?:\s+|$)", text_no_abbrev))
+    # Es muss ZWINGEND mehr als nur ein Satz sein
+    if len(endings) >= 2:
+        return True
+    if len(endings) == 1 and endings[0].end() < len(text_no_abbrev.rstrip()):
+        remaining = text_no_abbrev[endings[0].end():].strip()
+        if len(remaining.split()) >= 3:
+            return True
+    return False
+
+
 def parse_markdown_table_to_typst(table_lines: list) -> str:
     """Konvertiert eine Markdown-Tabelle nach Vorbild der iText-Druckfunktion in eine elegante Typst-Tabelle."""
     if len(table_lines) < 2:
@@ -2373,6 +2404,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         if p_info.get("is_separator") or (is_single_line and re.match(r"^[=\-_*~]{3,}\s*$", flat_text)):
             top_v = "#v(0.8em)\n" if typst_elements else ""
             typst_elements.append(f"{top_v}#line(length: 100%, stroke: 0.5pt + rgb(\"#000000\"))\n#v(0.8em)\n")
+            last_element_was_body_para = False
             continue
 
         # 0b. Markdown-Tabelle nach iText-Vorbild
@@ -2385,6 +2417,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             tbl_code = parse_markdown_table_to_typst(lines_in_para)
             if tbl_code:
                 typst_elements.append(f"{top_v}{tbl_code}")
+                last_element_was_body_para = False
                 continue
 
         # 1. Explizite Inline-Abbildung: ##Pfad/zur/Datei
@@ -2409,6 +2442,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             if resolved_img:
                 fig_code = format_figure_typst(resolved_img, caption_size=caption_size)
                 typst_elements.append(f"{top_v}{fig_code}")
+                last_element_was_body_para = False
                 continue
 
         # 1. Markdown-Blockquote (> ...)
@@ -2419,6 +2453,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                 f"{top_v}#block(width: 100%, inset: (left: 4.5mm, y: 2.2mm), stroke: (left: 2pt + rgb(\"#000000\")), above: 1.2em, below: 1.6em)"
                 f"[#par(leading: 0.52em)[#text(style: \"italic\", fill: rgb(\"#000000\"))[{escaped_quote}]]]\n"
             )
+            last_element_was_body_para = False
             continue
 
         # 2. Überschriften-Erkennung:
@@ -2461,6 +2496,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                     f"#render_section_heading([{h_text}], align_center: true, font_attr: {h_font_arg}, above_gap: 1.2em, below_gap: 1.2em)\n"
                 )
                 last_element_was_heading = True
+            last_element_was_body_para = False
             continue
 
 
@@ -2497,6 +2533,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                         explicit_bib_entries.append(cu.strip())
                 elif len(remainder) >= 15 and not bib_header_exact_regex.match(remainder):
                     explicit_bib_entries.append(remainder)
+            last_element_was_body_para = False
             continue
 
         # 5. APA-Zitate / Literaturangaben / reine URL-Blöcke (werden isoliert für die Extraseite gesammelt)
@@ -2513,6 +2550,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                         explicit_bib_entries.append(single_u.strip())
                 else:
                     explicit_bib_entries.append(l)
+            last_element_was_body_para = False
             continue
 
         # 6. Aufzählungspunkte und nummerierte Listen
@@ -2534,11 +2572,17 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                     item_text = format_content_to_typst(s_l)
                     list_lines.append(f"  {item_text}\n")
             typst_elements.append(f"{top_v}{''.join(list_lines)}")
+            last_element_was_body_para = False
             continue
 
         # 11. Regulärer Fließtextabsatz (Standard mit optionalem Initial im 1. Fließtext-Absatz)
         escaped_para = format_lines_to_typst_paragraph(p_raw_lines)
-        if use_initial and not first_body_para_done:
+        eligible_for_initial = (
+            use_initial 
+            and not first_body_para_done 
+            and can_apply_initial(p_raw_lines, escaped_para)
+        )
+        if eligible_for_initial:
             init_height = 3 if fmt in ("atk2", "atk3") else 4
             init_weight = "regular" if fmt in ("atk2", "atk3") else "bold"
             if fmt == "atk2":
@@ -2548,15 +2592,27 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             else:
                 init_font = title_font_spec
             escaped_para = apply_initial_to_typst_element(escaped_para, font_spec=init_font, height=init_height, weight=init_weight, gap="2pt")
+            first_body_para_done = True
             if top_v:
                 escaped_para = f"{top_v}{escaped_para}"
+            typst_elements.append(escaped_para + "\n")
+            last_element_was_body_para = True
         else:
-            if para_has_indent or (fmt == "atk2" and first_body_para_done):
+            if para_has_indent:
                 escaped_para = f"#h(3.8mm){escaped_para}"
-            if top_v:
-                escaped_para = f"{top_v}{escaped_para}"
-        first_body_para_done = True
-        typst_elements.append(escaped_para + "\n")
+            
+            # Format der Einzüge und Absätze berücksichtigen:
+            # Falls vor diesem Absatz in der Quelle KEINE Leerzeile war und der vorherige Block ein Fließtextabsatz war,
+            # schließt dieser Absatz nahtlos in der nächsten Zeile an (ohne vertikalen Absatzabstand)
+            if not p_info.get("has_blank_before") and blank_before == 0 and last_element_was_body_para and typst_elements:
+                prev_elem = typst_elements.pop().rstrip("\n")
+                combined = f"{prev_elem}\\\n{escaped_para}\n"
+                typst_elements.append(combined)
+            else:
+                if top_v:
+                    escaped_para = f"{top_v}{escaped_para}"
+                typst_elements.append(escaped_para + "\n")
+            last_element_was_body_para = True
 
     # Falls Bilder über -i übergeben wurden, diese am Ende anhängen
     if images:
@@ -3032,7 +3088,7 @@ def parse_rtf_to_typst(
                     content_init = f"{content_init}{bot_v}"
                 typst_blocks.append(content_init)
             else:
-                if p.get('has_indent') or (fmt == "atk2" and first_body_para_done):
+                if p.get('has_indent'):
                     content = f"#h(3.8mm){content}"
                 if top_v:
                     content = f"{top_v}{content}"
