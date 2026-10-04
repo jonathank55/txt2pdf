@@ -238,6 +238,30 @@ else
     echo -e "${GREEN}==>${NC} Playfair Display ist bereits vorhanden."
 fi
 
+# 3i. Prüfe und installiere Schriftart Kefa III
+echo -e "${BLUE}==>${NC} Prüfe Schriftart Kefa III..."
+KEFA_INSTALLED=false
+if command -v typst &>/dev/null && typst fonts 2>/dev/null | grep -qi "Kefa III"; then
+    KEFA_INSTALLED=true
+fi
+if [ -f "$FONTS_DIR/KefaIII.ttf" ]; then
+    KEFA_INSTALLED=true
+fi
+if [ "$KEFA_INSTALLED" = false ]; then
+    echo -e "${BLUE}==>${NC} Installiere Kefa III nach $FONTS_DIR..."
+    if [ -f "/System/Library/Fonts/Supplemental/KefaIII.ttf" ]; then
+        cp "/System/Library/Fonts/Supplemental/KefaIII.ttf" "$FONTS_DIR/KefaIII.ttf"
+    elif [ -d "$SCRIPT_SRC_DIR/fonts" ] && [ -f "$SCRIPT_SRC_DIR/fonts/KefaIII.ttf" ]; then
+        cp "$SCRIPT_SRC_DIR/fonts/KefaIII.ttf" "$FONTS_DIR/KefaIII.ttf"
+    fi
+    if command -v fc-cache &>/dev/null; then
+        fc-cache -f "$FONTS_DIR" &>/dev/null || true
+    fi
+    echo -e "${GREEN}==>${NC} Kefa III wurde erfolgreich eingerichtet."
+else
+    echo -e "${GREEN}==>${NC} Kefa III ist bereits vorhanden."
+fi
+
 # 4. Prüfe und installiere DeepL Python-Bibliothek
 echo -e "${BLUE}==>${NC} Prüfe DeepL-Bibliothek..."
 if ! python3 -c "import deepl" &>/dev/null; then

@@ -1371,6 +1371,18 @@ def resolve_apa_citation(url: str, context_text: str = "") -> Dict[str, str]:
     return format_citation_to_apa_7(url, context_text=context_text)
 
 FONT_DEFINITIONS = {
+    "kefa iii": {
+        "name": "Kefa III",
+        "spec": '("Kefa III", "PT Serif", "Times New Roman")',
+    },
+    "kefa": {
+        "name": "Kefa III",
+        "spec": '("Kefa III", "PT Serif", "Times New Roman")',
+    },
+    "kefaiii": {
+        "name": "Kefa III",
+        "spec": '("Kefa III", "PT Serif", "Times New Roman")',
+    },
     "times new roman": {
         "name": "Times New Roman",
         "spec": '("Times New Roman", "Times", "PT Serif")',
@@ -1617,7 +1629,7 @@ def resolve_font_spec(font_arg: str = None, fmt: str = "atk2") -> Tuple[str, str
     elif fmt in ("atk3", "artikel3", "br2", "bericht2"):
         return FONT_DEFINITIONS["bookerly"]["spec"], "Bookerly"
     elif fmt in ("br1", "bericht1"):
-        return FONT_DEFINITIONS["pt serif"]["spec"], "PT Serif"
+        return FONT_DEFINITIONS["kefa iii"]["spec"], "Kefa III"
     elif fmt == "apa":
         return FONT_DEFINITIONS["times new roman"]["spec"], "Times New Roman"
     else:
@@ -1727,6 +1739,22 @@ def install_core_fonts() -> bool:
                                 downloaded_count += 1
             except Exception as e:
                 print(f"Hinweis: Download von {check_file} fehlgeschlagen: {e}", file=sys.stderr)
+
+    # Kefa III (macOS-Systemschriftart / lokales Bundle)
+    kefa_target = os.path.join(font_dir, "KefaIII.ttf")
+    if not os.path.exists(kefa_target):
+        kefa_sys = "/System/Library/Fonts/Supplemental/KefaIII.ttf"
+        local_fonts = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts", "KefaIII.ttf")
+        if os.path.exists(kefa_sys):
+            try:
+                shutil.copy2(kefa_sys, kefa_target)
+            except Exception:
+                pass
+        elif os.path.exists(local_fonts):
+            try:
+                shutil.copy2(local_fonts, kefa_target)
+            except Exception:
+                pass
 
     if not is_mac and shutil.which("fc-cache"):
         subprocess.run(["fc-cache", "-f", font_dir], check=False)
@@ -4037,12 +4065,12 @@ def main():
         f"{BLUE}atk1{RESET} (Artikel, 3 Spalten, Garamond, mit Linie; Überschriften via # zentriert), "
         f"{BLUE}atk3{RESET} (Artikel, 2 Spalten, Bookerly, 10pt, Ränder riesig; Überschriften zentriert in Amazon Ember), "
         f"{BLUE}br2{RESET} (Bericht, 2 Spalten, Bookerly, 10pt; Überschriften via # im Blocktext), "
-        f"{BLUE}br1{RESET} (Bericht, 1 Spalte, PT Serif, 10pt; Überschriften via # im Blocktext), "
+        f"{BLUE}br1{RESET} (Bericht, 1 Spalte, Kefa III, 10pt; Überschriften via # im Blocktext), "
         f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter). Überschriften werden nur anhand von '#' erkannt; Standard: {BLUE}atk2{RESET}"
     )
     size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 10pt bei atk1/atk3/br2/br1, 9pt bei atk2; entfällt bei apa)"
     font_help = (
-        f"Schriftart ({BLUE}Bookerly{RESET}, {BLUE}Iowan Old Style{RESET}, {BLUE}Charter{RESET}, {BLUE}Amazon Ember{RESET}, {BLUE}Playfair Display{RESET}, {BLUE}Bodoni{RESET}, "
+        f"Schriftart ({BLUE}Kefa III{RESET}, {BLUE}Bookerly{RESET}, {BLUE}Iowan Old Style{RESET}, {BLUE}Charter{RESET}, {BLUE}Amazon Ember{RESET}, {BLUE}Playfair Display{RESET}, {BLUE}Bodoni{RESET}, "
         f"{BLUE}Garamond{RESET}, {BLUE}Times New Roman{RESET}, {BLUE}PT Serif{RESET}, {BLUE}Optima{RESET}, "
         f"{BLUE}Didot{RESET}, {BLUE}Cochin{RESET}, {BLUE}Big Caslon{RESET}, {BLUE}Baskerville{RESET}, {BLUE}Libre Baskerville{RESET}, "
         f"{BLUE}Faustina{RESET}, {BLUE}Canela Text{RESET}, {BLUE}Gill Sans{RESET}, {BLUE}Avenir Next{RESET}, {BLUE}Lucida Grande{RESET}, "
