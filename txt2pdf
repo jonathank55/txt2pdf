@@ -69,7 +69,7 @@ def escape_typst_line(line: str) -> str:
     return res
 
 def format_content_to_typst(text: str) -> str:
-    """Konvertiert Markdown-Formatierungen sicher und maskiert alle übrigen Typst-Sonderzeichen."""
+    """Konvertiert Markdown-Formatierungen (Fett, Kursiv, Fett-Kursiv, Code, Durchgestrichen, Links) sicher nach iText-Vorbild in Typst-Code."""
     # 1. Links schützen (Markdown [label](url) und reine bare URLs)
     links = []
 
@@ -100,7 +100,29 @@ def format_content_to_typst(text: str) -> str:
 
     text = re.sub(r'\b(doi:\s*)(10\.\d{4,9}/[^\s<>"\'\[\]]+)', save_bare_doi, text, flags=re.I)
 
-    # 2. Fettung schützen (**bold** und __bold__)
+    # 2. Inline-Code schützen (`code`)
+    codes = []
+    def save_code(m):
+        inner = m.group(1)
+        idx = len(codes)
+        inner_esc = inner.replace('\\', '\\\\').replace('"', '\\"')
+        codes.append(f'#box(fill: rgb("#f4f4f4"), inset: (x: 2.5pt, y: 0pt), baseline: 0%, radius: 1.5pt)[#text(font: "PT Mono", size: 0.88em)[{inner_esc}]]')
+        return f'TYPSTPLCHLDRCODE{idx}END'
+
+    text = re.sub(r'`([^`\n]+)`', save_code, text)
+
+    # 3. Fett-Kursiv (***bolditalic*** und ___bolditalic___)
+    bold_italics = []
+    def save_bold_italic(m):
+        inner = m.group(1)
+        idx = len(bold_italics)
+        bold_italics.append(f'#strong[#emph[{escape_typst_line(inner)}]]')
+        return f'TYPSTPLCHLDRBI{idx}END'
+
+    text = re.sub(r'\*\*\*(.+?)\*\*\*', save_bold_italic, text)
+    text = re.sub(r'___(.+?)___', save_bold_italic, text)
+
+    # 4. Fett (**bold** und __bold__)
     strongs = []
     def save_strong(m):
         inner = m.group(1)
@@ -111,18 +133,51 @@ def format_content_to_typst(text: str) -> str:
     text = re.sub(r'\*\*(.+?)\*\*', save_strong, text)
     text = re.sub(r'__(.+?)__', save_strong, text)
 
-    # 3. Gedankenstriche normalisieren (Halbgeviertstrich-Invariante)
+    # 5. Kursiv (*italic* und _italic_)
+    emphs = []
+    def save_emph(m):
+        inner = m.group(1)
+        idx = len(emphs)
+        emphs.append(f'#emph[{escape_typst_line(inner)}]')
+        return f'TYPSTPLCHLDREMPH{idx}END'
+
+    text = re.sub(r'(?<!\*)\*(?!\s|\*)(.+?)(?<!\s|\*)\*(?!\*)', save_emph, text)
+    text = re.sub(r'(?<![a-zA-Z0-9_])_(?!\s|_)(.+?)(?<!\s|_)_(?![a-zA-Z0-9_])', save_emph, text)
+
+    # 6. Durchgestrichen (~~strike~~)
+    strikes = []
+    def save_strike(m):
+        inner = m.group(1)
+        idx = len(strikes)
+        strikes.append(f'#strike[{escape_typst_line(inner)}]')
+        return f'TYPSTPLCHLDRSTRIKE{idx}END'
+
+    text = re.sub(r'~~(.+?)~~', save_strike, text)
+
+    # 7. Gedankenstriche normalisieren (Halbgeviertstrich-Invariante)
     text = text.replace("—", " – ").replace("---", "--")
     text = re.sub(r'\s*–\s*', ' – ', text)
 
-    # 4. Verbleibende Typst-Sonderzeichen und Kommentarzeichen maskieren (verhindert unclosed delimiter / math / label-Kollisionen)
-    for c in ["#", "$", "@", "[", "]", "*", "<", ">", "_"]:
+    # 8. Verbleibende Typst-Sonderzeichen und Kommentarzeichen maskieren
+    for c in ["#", "$", "@", "[", "]", "<", ">", "*", "_"]:
         text = text.replace(c, f"\\{c}")
     text = text.replace("//", r"\/\/").replace("/*", r"\/\*").replace("*/", r"\*\/")
 
-    # 5. Geschützte Tokens wieder einsetzen
+    # 9. Geschützte Tokens in umgekehrter Schachtelungsreihenfolge wieder einsetzen
+    for idx, s in enumerate(strikes):
+        text = text.replace(f'TYPSTPLCHLDRSTRIKE{idx}END', s)
+
+    for idx, e in enumerate(emphs):
+        text = text.replace(f'TYPSTPLCHLDREMPH{idx}END', e)
+
     for idx, s in enumerate(strongs):
         text = text.replace(f'TYPSTPLCHLDRSTRONG{idx}END', s)
+
+    for idx, bi in enumerate(bold_italics):
+        text = text.replace(f'TYPSTPLCHLDRBI{idx}END', bi)
+
+    for idx, c in enumerate(codes):
+        text = text.replace(f'TYPSTPLCHLDRCODE{idx}END', c)
 
     for idx, l in enumerate(links):
         text = text.replace(f'TYPSTPLCHLDRLINK{idx}END', l)
@@ -1988,6 +2043,71 @@ def is_single_sentence(text: str) -> bool:
     return False
 
 
+def parse_markdown_table_to_typst(table_lines: list) -> str:
+    """Konvertiert eine Markdown-Tabelle nach Vorbild der iText-Druckfunktion in eine elegante Typst-Tabelle."""
+    if len(table_lines) < 2:
+        return ""
+
+    raw_header = [c.strip() for c in table_lines[0].strip().strip('|').split('|')]
+    if not raw_header:
+        return ""
+
+    cols = len(raw_header)
+
+    aligns = []
+    data_start_idx = 1
+
+    if len(table_lines) > 1 and re.match(r"^[\s\:\-\|]+$", table_lines[1]):
+        data_start_idx = 2
+        raw_delims = [c.strip() for c in table_lines[1].strip().strip('|').split('|')]
+        for d in raw_delims:
+            d_clean = d.strip()
+            if d_clean.startswith(":") and d_clean.endswith(":"):
+                aligns.append("center")
+            elif d_clean.endswith(":"):
+                aligns.append("right")
+            else:
+                aligns.append("left")
+
+    while len(aligns) < cols:
+        aligns.append("left")
+
+    align_array_str = ", ".join(aligns[:cols])
+
+    cells_typst = []
+    for h in raw_header:
+        h_formatted = format_content_to_typst(h)
+        cells_typst.append(f"[#strong[{h_formatted}]]")
+
+    for row_line in table_lines[data_start_idx:]:
+        s_row = row_line.strip()
+        if not s_row or not ("|" in s_row):
+            continue
+        row_cells = [c.strip() for c in s_row.strip('|').split('|')]
+        while len(row_cells) < cols:
+            row_cells.append("")
+        for cell in row_cells[:cols]:
+            c_formatted = format_content_to_typst(cell)
+            cells_typst.append(f"[{c_formatted}]")
+
+    cells_block = ",\n      ".join(cells_typst)
+
+    return (
+        f"#align(center)[\n"
+        f"  #block(width: 100%, inset: (y: 0.8em))[\n"
+        f"    #set text(size: 8.5pt)\n"
+        f"    #table(\n"
+        f"      columns: {cols},\n"
+        f"      align: (col, row) => ({align_array_str}).at(calc.min(col, {cols - 1})),\n"
+        f"      stroke: (x, y) => if y == 0 {{ (bottom: 0.8pt + rgb(\"#000000\")) }} else {{ (bottom: 0.3pt + rgb(\"#bbbbbb\")) }},\n"
+        f"      fill: (col, row) => if row == 0 {{ rgb(\"#f4f4f4\") }} else {{ none }},\n"
+        f"      {cells_block}\n"
+        f"    )\n"
+        f"  ]\n"
+        f"]\n"
+    )
+
+
 def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str = "6pt", use_initial: bool = True, doc_dir: str = "", hanging_indent: str = "6mm", title_font_spec: str = None, heading_font_spec: str = None, fmt: str = "atk1", body_font_spec: str = None) -> Tuple[str, List[str], List[str], str, bool]:
     """Wandelt Textzeilen in Typst-Code um, verarbeitet Überschriften, trennt APA-Zitate für die Extraseite und extrahiert Links."""
     full_raw_text = "\n".join(raw_lines)
@@ -2113,11 +2233,28 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             current_indent = False
             current_blank_count = 0
 
+        # Markdown-Überschrift (#, ##, ###, ####, #####, ######)
+        is_md_heading_line = bool(re.match(r"^#{1,6}\s+", s))
+
+        # Markdown-Tabelle (| ... |)
+        is_table_line = bool(s.startswith("|") or (s.endswith("|") and "|" in s[1:-1]))
+        if is_table_line and current_lines and not any("|" in cl for cl in current_lines):
+            paragraphs.append({
+                "text": "\n".join(current_lines),
+                "raw_lines": list(current_lines),
+                "has_indent": current_indent,
+                "blank_lines_before": current_blank_count,
+                "has_blank_before": bool(current_blank_count > 0)
+            })
+            current_lines = []
+            current_indent = False
+            current_blank_count = 0
+
         is_isolated_sentence_candidate = bool(
             not is_indented_line and is_single_sentence(s) and len(s) <= 250
         )
-        if s.startswith(">") or is_isolated_sentence_candidate:
-            if current_lines:
+        if s.startswith(">") or is_md_heading_line or is_isolated_sentence_candidate:
+            if current_lines and not is_table_line:
                 paragraphs.append({
                     "text": "\n".join(current_lines),
                     "raw_lines": list(current_lines),
@@ -2128,15 +2265,16 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                 current_lines = []
                 current_indent = False
                 current_blank_count = 0
-            paragraphs.append({
-                "text": s,
-                "raw_lines": [line],
-                "has_indent": False,
-                "blank_lines_before": blank_lines_count,
-                "has_blank_before": bool(blank_lines_count > 0)
-            })
-            blank_lines_count = 0
-            continue
+            if not is_table_line:
+                paragraphs.append({
+                    "text": s,
+                    "raw_lines": [line],
+                    "has_indent": False,
+                    "blank_lines_before": blank_lines_count,
+                    "has_blank_before": bool(blank_lines_count > 0)
+                })
+                blank_lines_count = 0
+                continue
 
         # Trennlinien-Erkennung: Zeilen aus wiederholten Sonderzeichen (======, ------, ___, ~~~, etc.)
         if re.match(r"^[=\-_*~]{3,}\s*$", s):
@@ -2222,13 +2360,23 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         else:
             top_v = ""
 
-        # 0. Explizite Trennlinie (======, ------, ___, ~~~, etc.) → native Typst-Linie
+        # 0. Explizite Trennlinie (======, ------, ___, ~~~, etc.) → native Typst-Linie nach iText-Vorbild
         if p_info.get("is_separator") or (is_single_line and re.match(r"^[=\-_*~]{3,}\s*$", flat_text)):
-            if fmt in ("br1", "br2"):
-                continue
-            top_v = "#v(0.5em)\n" if typst_elements else ""
-            typst_elements.append(f"{top_v}#line(length: 100%, stroke: 0.3pt + rgb(\"#000000\"))\n#v(0.5em)\n")
+            top_v = "#v(0.8em)\n" if typst_elements else ""
+            typst_elements.append(f"{top_v}#line(length: 100%, stroke: 0.5pt + rgb(\"#000000\"))\n#v(0.8em)\n")
             continue
+
+        # 0b. Markdown-Tabelle nach iText-Vorbild
+        is_table_block = (
+            len(lines_in_para) >= 2
+            and all("|" in l.strip() for l in lines_in_para if l.strip())
+            and any(re.match(r"^[\s\:\-\|]+$", l.strip()) for l in lines_in_para[1:3])
+        )
+        if is_table_block:
+            tbl_code = parse_markdown_table_to_typst(lines_in_para)
+            if tbl_code:
+                typst_elements.append(f"{top_v}{tbl_code}")
+                continue
 
         # 1. Explizite Inline-Abbildung: ##Pfad/zur/Datei
         if is_single_line and first_line.startswith("##") and not first_line.startswith("###"):
@@ -2264,8 +2412,11 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             )
             continue
 
-        # 2. Überschriften-Erkennung: Ein einziger, isolierter Satz (mit oder ohne Punkt am Ende)
-        is_heading_block = (
+        # 2. Überschriften-Erkennung:
+        # A) Markdown-Rauten (#, ##, ###, ####, #####, ######)
+        # B) Ein einziger, isolierter Satz (mit oder ohne Punkt am Ende für .txt-Dateien)
+        m_md_heading = re.match(r"^(#{1,6})\s+(.+)$", first_line)
+        is_isolated_sentence = (
             not para_has_indent
             and not first_line.startswith(("\t", "  "))
             and not p_info.get("is_separator")
@@ -2279,8 +2430,11 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             and len(flat_text) <= 300
             and is_single_sentence(flat_text)
         )
-        if is_heading_block:
-            clean_heading = re.sub(r"^#{1,6}\s*", "", flat_text).strip()
+        if m_md_heading or is_isolated_sentence:
+            if m_md_heading:
+                clean_heading = m_md_heading.group(2).strip()
+            else:
+                clean_heading = re.sub(r"^#{1,6}\s*", "", flat_text).strip()
             h_text = escape_typst_line(clean_heading)
             h_font_arg = heading_font_spec if heading_font_spec else "none"
             if fmt in ("atk1", "atk2", "atk3"):
