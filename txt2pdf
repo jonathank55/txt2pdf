@@ -16,7 +16,7 @@ Features:
 - Schriftarten: PT Serif (Standard via --serif), PT Mono (--mono), PT Sans (--sans), Times New Roman (--timesnew), Jost / Futura (--jost).
 - Spaltenwahl: 3-Spalten (--3col, Standard), 2-Spalten (--2col) oder 1-Spalte (--1col).
 - Single-Occurrence Author Invariant: Der Autor wird ausnahmslos genau EINMAL unter dem Titel gerendert.
-- Überschriften-Invariante: Überschriften werden ausschließlich anhand führender Markdown-Rauten ('#') erkannt (bei 'atk1' und 'atk2' zentriert, bei 'br1' und 'br2' im bündigen Blocktextformat). Alle automatischen Erkennungsregeln ohne '#' sind entfernt.
+- Überschriften-Invariante: Überschriften werden anhand der Tatsache erkannt, dass ein einziger, isolierter Satz vorliegt (mit oder ohne Punkt am Ende; bei 'atk1' und 'atk2' zentriert, bei 'br1' und 'br2' im bündigen Blocktextformat). Die Erkennung anhand von '#' ist gelöscht.
 - Intelligente Bildplatzierung via --img (semantisches Keyword-Matching).
 - Automatisches Literaturverzeichnis (APA 7).
 """
@@ -1960,6 +1960,34 @@ def format_lines_to_typst_paragraph(lines_in_para: List[str]) -> str:
             parts.append(esc)
         return " ".join(parts)
 
+
+def is_single_sentence(text: str) -> bool:
+    """
+    Prüft, ob der gegebene Text aus genau einem einzigen Satz besteht
+    (mit oder ohne Punkt, Ausrufezeichen oder Fragezeichen am Ende).
+    """
+    s = text.strip()
+    if not s:
+        return False
+    clean = re.sub(r"^#{1,6}\s*", "", s).strip()
+    if not clean:
+        return False
+    if clean.startswith(("http://", "https://", "doi:", "10.", "##", ">", "-", "*", "•")):
+        return False
+    if re.match(r"^\d+[\.\)]\s+", clean):
+        return False
+    abbrev_pattern = r"\b(?:z\.?\s*B|d\.?\s*h|u\.?\s*a|bzw|etc|ca|vgl|usw|Dr|Prof|Nr|Aufl|vs|Inc|e\.?\s*V)\."
+    text_no_abbrev = re.sub(abbrev_pattern, "ABBR", clean, flags=re.IGNORECASE)
+    text_no_abbrev = re.sub(r"\b\d+\.\d+\b", "NUM", text_no_abbrev)
+    sentence_endings = list(re.finditer(r"[.!?]+(?:\s+|$)", text_no_abbrev))
+    if not sentence_endings:
+        return True
+    if len(sentence_endings) == 1:
+        if sentence_endings[0].end() >= len(text_no_abbrev.rstrip()):
+            return True
+    return False
+
+
 def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str = "6pt", use_initial: bool = True, doc_dir: str = "", hanging_indent: str = "6mm", title_font_spec: str = None, heading_font_spec: str = None, fmt: str = "atk1", body_font_spec: str = None) -> Tuple[str, List[str], List[str], str, bool]:
     """Wandelt Textzeilen in Typst-Code um, verarbeitet Überschriften, trennt APA-Zitate für die Extraseite und extrahiert Links."""
     full_raw_text = "\n".join(raw_lines)
@@ -2085,11 +2113,10 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             current_indent = False
             current_blank_count = 0
 
-        is_md_block = bool(
-            re.match(r"^#{1,6}\s+", s) or
-            s.startswith(">")
+        is_isolated_sentence_candidate = bool(
+            not is_indented_line and is_single_sentence(s) and len(s) <= 250
         )
-        if is_md_block:
+        if s.startswith(">") or is_isolated_sentence_candidate:
             if current_lines:
                 paragraphs.append({
                     "text": "\n".join(current_lines),
@@ -2237,10 +2264,24 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             )
             continue
 
-        # 2. Markdown-Überschriften (#, ##, ###, ####, #####, ######) - Zentriert ausschließlich bei führendem '#'
-        m_heading = re.match(r"^(#{1,6})\s+(.+)$", first_line)
-        if m_heading:
-            h_text = escape_typst_line(m_heading.group(2).strip())
+        # 2. Überschriften-Erkennung: Ein einziger, isolierter Satz (mit oder ohne Punkt am Ende)
+        is_heading_block = (
+            not para_has_indent
+            and not first_line.startswith(("\t", "  "))
+            and not p_info.get("is_separator")
+            and not first_line.startswith(("##", ">", "-", "*", "•"))
+            and not re.match(r"^\d+[\.\)]\s+", first_line)
+            and not bib_header_exact_regex.match(flat_text)
+            and not bib_header_inline_regex.match(flat_text)
+            and not is_apa_citation(flat_text)
+            and not in_bibliography_section
+            and len(lines_in_para) <= 2
+            and len(flat_text) <= 300
+            and is_single_sentence(flat_text)
+        )
+        if is_heading_block:
+            clean_heading = re.sub(r"^#{1,6}\s*", "", flat_text).strip()
+            h_text = escape_typst_line(clean_heading)
             h_font_arg = heading_font_spec if heading_font_spec else "none"
             if fmt in ("atk1", "atk2", "atk3"):
                 typst_elements.append(
@@ -2367,7 +2408,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
 
 DATE_PATTERNS = [
     r"^(?:Datum|Date):\s*(.+)$",
-    r"^(\d{1,2}\.\s*(?:Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember|Jan|Feb|Mär|Apr|Mai|Jun|Jul|Aug|Sep|Okt|Nov|Dez)\s+\d{4})$",
+    r"^(?:Verfasst\s+am\s+)?(\d{1,2}\.\s*(?:Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember|Jan|Feb|Mär|Apr|Mai|Jun|Jul|Aug|Sep|Okt|Nov|Dez)\s+\d{4})(?:.*)?$",
     r"^((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})$",
     r"^(\d{1,2}\.\d{1,2}\.\d{2,4})$",
     r"^(\d{4}-\d{2}-\d{2})$"
@@ -3011,22 +3052,18 @@ def extract_metadata_and_body(raw_text: str, default_author: str = None, default
         # Inhaltszeile NIEMALS als Titel abgeschnitten werden! Sie ist Teil des Textkörpers (Überschrift 1 / 2).
         # Nur wenn sie semantisch exakt mit known_title übereinstimmt, ist sie eine redundante Titeldopplung im Kopf.
         if not extracted_title:
-            if known_title:
-                if is_matching_title(line_s, known_title):
-                    extracted_title = line_s
-                    curr_idx += 1
-                    continue
+            if known_title and is_matching_title(line_s, known_title):
+                extracted_title = line_s
+                curr_idx += 1
+                continue
             else:
-                # Kein known_title vorhanden: Nur wenn unmittelbar danach ein Autor oder Datum folgt,
-                # kann eine kurze Zeile ohne Punkt als Titel im Kopf gewertet werden.
-                # Andernfalls bleibt sie Textinhalt!
                 has_subsequent_metadata = False
                 for check_i in range(curr_idx + 1, min(curr_idx + 4, len(lines))):
                     next_s = lines[check_i].strip()
                     if next_s and (is_author_name(next_s) or any(d_reg.match(next_s) for d_reg in date_regexes)):
                         has_subsequent_metadata = True
                         break
-                if has_subsequent_metadata and len(line_s) <= 200 and not line_s.endswith((".", "!", "?")) and not line_s.startswith(("-", "*", "•", "##", ">")):
+                if has_subsequent_metadata and len(line_s) <= 250 and not line_s.startswith(("-", "*", "•", "##", ">")):
                     if not is_author_name(line_s):
                         extracted_title = line_s
                         curr_idx += 1
@@ -4062,11 +4099,11 @@ def main():
 
     fmt_help = (
         f"Format: {BLUE}atk2{RESET} (Kindle-Format, 3 Spalten, Faustina, Autor in Amazon Ember, ohne Linie; Standard), "
-        f"{BLUE}atk1{RESET} (Artikel, 3 Spalten, Garamond, mit Linie; Überschriften via # zentriert), "
+        f"{BLUE}atk1{RESET} (Artikel, 3 Spalten, Garamond, mit Linie; Überschriften zentriert), "
         f"{BLUE}atk3{RESET} (Artikel, 2 Spalten, Bookerly, 10pt, Ränder riesig; Überschriften zentriert in Amazon Ember), "
-        f"{BLUE}br2{RESET} (Bericht, 2 Spalten, Bookerly, 10pt; Überschriften via # im Blocktext), "
-        f"{BLUE}br1{RESET} (Bericht, 1 Spalte, Kefa III, 10pt; Überschriften via # im Blocktext), "
-        f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter). Überschriften werden nur anhand von '#' erkannt; Standard: {BLUE}atk2{RESET}"
+        f"{BLUE}br2{RESET} (Bericht, 2 Spalten, Bookerly, 10pt; Überschriften im Blocktext), "
+        f"{BLUE}br1{RESET} (Bericht, 1 Spalte, Kefa III, 10pt; Überschriften im Blocktext), "
+        f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter). Überschriften als isolierte Sätze; Standard: {BLUE}atk2{RESET}"
     )
     size_help = f"Textgröße ({BLUE}6pt{RESET} bis {BLUE}12pt{RESET}; Standard: 10pt bei atk1/atk3/br2/br1, 9pt bei atk2; entfällt bei apa)"
     font_help = (
@@ -4082,7 +4119,7 @@ def main():
     parser = argparse.ArgumentParser(
         prog="txt2pdf",
         formatter_class=lambda prog: SingleLineHelpFormatter(prog, max_help_position=16, width=220),
-        description="Wandelt Text- und RTF-Dateien in typografische PDFs via Typst um (Überschriften ausschließlich via '#').",
+        description="Wandelt Text- und RTF-Dateien in typografische PDFs via Typst um (Überschriften als isolierte Sätze).",
         add_help=False
     )
     parser.add_argument("-h", action="help", help="Hilfe anzeigen")
