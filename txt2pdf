@@ -59,6 +59,15 @@ YELLOW = "\033[1;33m"
 RED = "\033[0;31m"
 RESET = "\033[0m"
 
+def get_divider(char="─", default=75) -> str:
+    """Gibt eine horizontale Trennlinie dynamisch angepasst an die Terminalbreite zurück."""
+    try:
+        width = shutil.get_terminal_size((default, 20)).columns
+        return char * max(40, width)
+    except Exception:
+        return char * default
+
+
 def escape_typst_line(line: str) -> str:
     """Maskiert typst-spezifische Sonderzeichen außerhalb von gewollten Formatierungen."""
     chars_to_escape = ["#", "$", "@", "[", "]", "*", "<", ">"]
@@ -3482,22 +3491,22 @@ def convert_txt_to_apa_standalone(
 
     if res.returncode == 0 and os.path.exists(abs_output) and os.path.getsize(abs_output) > 0:
         print(f"\n{BOLD}{BLUE}=== Typst PDF-Engine (txt2pdf) ==={RESET}")
-        print(f"{BLUE}───────────────────────────────────────────────────────────────────────────{RESET}")
+        print(f"{BLUE}{get_divider('─')}{RESET}")
         print(f"{BOLD}Quelldatei:{RESET}    {abs_input}")
         print(f"{BOLD}Ausgabepfad:{RESET}   {abs_output}")
         print(f"{BOLD}Formatpreset:{RESET}  apa (APA 7. Edition)")
         print(f"{BOLD}Status:{RESET}        {GREEN}✓ ERFOLG{RESET}")
-        print(f"{BLUE}───────────────────────────────────────────────────────────────────────────{RESET}\n")
+        print(f"{BLUE}{get_divider('─')}{RESET}\n")
         if open_preview:
             subprocess.run(["open", abs_output], timeout=60)
         return True
     else:
         print(f"\n{BOLD}{BLUE}=== Typst PDF-Engine (txt2pdf) ==={RESET}", file=sys.stderr)
-        print(f"{BLUE}───────────────────────────────────────────────────────────────────────────{RESET}", file=sys.stderr)
+        print(f"{BLUE}{get_divider('─')}{RESET}", file=sys.stderr)
         print(f"{BOLD}Quelldatei:{RESET}    {abs_input}", file=sys.stderr)
         print(f"{BOLD}Status:{RESET}        {RED}✗ FEHLER{RESET}", file=sys.stderr)
         print(f"{BOLD}Typst-Fehlermeldung:{RESET}\n{res.stderr.strip()}", file=sys.stderr)
-        print(f"{BLUE}───────────────────────────────────────────────────────────────────────────{RESET}\n", file=sys.stderr)
+        print(f"{BLUE}{get_divider('─')}{RESET}\n", file=sys.stderr)
         return False
 
 def translate_via_deepl(text: str, target_lang: str = "en", source_lang: str = "auto") -> str:
@@ -3564,10 +3573,10 @@ def convert_txt_to_pdf(
 ) -> bool:
     if not os.path.exists(input_path):
         print(f"\n{BOLD}{BLUE}=== Typst PDF-Engine (txt2pdf) ==={RESET}", file=sys.stderr)
-        print(f"{BLUE}───────────────────────────────────────────────────────────────────────────{RESET}", file=sys.stderr)
+        print(f"{BLUE}{get_divider('─')}{RESET}", file=sys.stderr)
         print(f"{BOLD}Quelldatei:{RESET}    {input_path}", file=sys.stderr)
         print(f"{BOLD}Status:{RESET}        {RED}✗ FEHLER (Datei existiert nicht){RESET}", file=sys.stderr)
-        print(f"{BLUE}───────────────────────────────────────────────────────────────────────────{RESET}\n", file=sys.stderr)
+        print(f"{BLUE}{get_divider('─')}{RESET}\n", file=sys.stderr)
         return False
 
     abs_input = os.path.abspath(input_path)
@@ -4176,24 +4185,24 @@ def convert_txt_to_pdf(
 
     if res.returncode == 0 and os.path.exists(abs_output) and os.path.getsize(abs_output) > 0:
         print(f"\n{BOLD}{BLUE}=== Typst PDF-Engine (txt2pdf) ==={RESET}")
-        print(f"{BLUE}───────────────────────────────────────────────────────────────────────────{RESET}")
+        print(f"{BLUE}{get_divider('─')}{RESET}")
         print(f"{BOLD}Quelldatei:{RESET}    {abs_input}")
         print(f"{BOLD}Ausgabepfad:{RESET}   {abs_output}")
         print(f"{BOLD}Formatpreset:{RESET}  {format_preset}")
         if target_lang:
             print(f"{BOLD}Übersetzung:{RESET}   {target_lang}")
         print(f"{BOLD}Status:{RESET}        {GREEN}✓ ERFOLG{RESET}")
-        print(f"{BLUE}───────────────────────────────────────────────────────────────────────────{RESET}\n")
+        print(f"{BLUE}{get_divider('─')}{RESET}\n")
         if open_preview:
             subprocess.run(["open", abs_output], timeout=60)
         return True
     else:
         print(f"\n{BOLD}{BLUE}=== Typst PDF-Engine (txt2pdf) ==={RESET}", file=sys.stderr)
-        print(f"{BLUE}───────────────────────────────────────────────────────────────────────────{RESET}", file=sys.stderr)
+        print(f"{BLUE}{get_divider('─')}{RESET}", file=sys.stderr)
         print(f"{BOLD}Quelldatei:{RESET}    {abs_input}", file=sys.stderr)
         print(f"{BOLD}Status:{RESET}        {RED}✗ FEHLER{RESET}", file=sys.stderr)
         print(f"{BOLD}Typst-Fehlermeldung:{RESET}\n{res.stderr.strip()}", file=sys.stderr)
-        print(f"{BLUE}───────────────────────────────────────────────────────────────────────────{RESET}\n", file=sys.stderr)
+        print(f"{BLUE}{get_divider('─')}{RESET}\n", file=sys.stderr)
         return False
 
 convert_txt_to_3col_pdf = convert_txt_to_pdf
