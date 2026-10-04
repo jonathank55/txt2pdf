@@ -70,22 +70,7 @@ def escape_typst_line(line: str) -> str:
 
 def format_content_to_typst(text: str) -> str:
     """Konvertiert Markdown-Formatierungen sicher und maskiert alle übrigen Typst-Sonderzeichen."""
-    # 0. Checkboxen / Task-Listen schützen (- [ ] und - [x])
-    text = re.sub(r'\[ \]', '☐', text)
-    text = re.sub(r'\[[xX]\]', '☑', text)
-
-    # 1. Inline-Code schützen (`code`)
-    codes = []
-    def save_code(m):
-        code_str = m.group(1)
-        idx = len(codes)
-        escaped_code = code_str.replace('\\', '\\\\').replace('"', '\\"')
-        codes.append(f'#box(fill: luma(242), inset: (x: 3pt, y: 0pt), radius: 2pt)[#text(font: ("Menlo", "Courier New"), size: 0.88em)[#raw("{escaped_code}")]]')
-        return f'TYPSTPLCHLDRCODE{idx}END'
-
-    text = re.sub(r'`([^`\n]+?)`', save_code, text)
-
-    # 2. Links schützen (Markdown [label](url) und reine bare URLs)
+    # 1. Links schützen (Markdown [label](url) und reine bare URLs)
     links = []
 
     def save_md_link(m):
@@ -115,7 +100,7 @@ def format_content_to_typst(text: str) -> str:
 
     text = re.sub(r'\b(doi:\s*)(10\.\d{4,9}/[^\s<>"\'\[\]]+)', save_bare_doi, text, flags=re.I)
 
-    # 3. Fettung schützen (**bold** und __bold__)
+    # 2. Fettung schützen (**bold** und __bold__)
     strongs = []
     def save_strong(m):
         inner = m.group(1)
@@ -126,51 +111,21 @@ def format_content_to_typst(text: str) -> str:
     text = re.sub(r'\*\*(.+?)\*\*', save_strong, text)
     text = re.sub(r'__(.+?)__', save_strong, text)
 
-    # 4. Durchgestrichen schützen (~~strike~~)
-    strikes = []
-    def save_strike(m):
-        inner = m.group(1)
-        idx = len(strikes)
-        strikes.append(f'#strike[{escape_typst_line(inner)}]')
-        return f'TYPSTPLCHLDRSTRIKE{idx}END'
-
-    text = re.sub(r'~~(.+?)~~', save_strike, text)
-
-    # 5. Kursiv schützen (*italic* und _italic_)
-    emphs = []
-    def save_emph(m):
-        inner = m.group(1)
-        idx = len(emphs)
-        emphs.append(f'#emph[{escape_typst_line(inner)}]')
-        return f'TYPSTPLCHLDREMPH{idx}END'
-
-    text = re.sub(r'(?<!\*)\*([^*\n]+?)\*(?!\*)', save_emph, text)
-    text = re.sub(r'(?<!_)\b_([^_\n]+?)_\b(?!_)', save_emph, text)
-
-    # 6. Gedankenstriche normalisieren (Halbgeviertstrich-Invariante)
+    # 3. Gedankenstriche normalisieren (Halbgeviertstrich-Invariante)
     text = text.replace("—", " – ").replace("---", "--")
     text = re.sub(r'\s*–\s*', ' – ', text)
 
-    # 7. Verbleibende Typst-Sonderzeichen und Kommentarzeichen maskieren (verhindert unclosed delimiter / math / label-Kollisionen)
+    # 4. Verbleibende Typst-Sonderzeichen und Kommentarzeichen maskieren (verhindert unclosed delimiter / math / label-Kollisionen)
     for c in ["#", "$", "@", "[", "]", "*", "<", ">", "_"]:
         text = text.replace(c, f"\\{c}")
     text = text.replace("//", r"\/\/").replace("/*", r"\/\*").replace("*/", r"\*\/")
 
-    # 8. Geschützte Tokens wieder einsetzen
-    for idx, em in enumerate(emphs):
-        text = text.replace(f'TYPSTPLCHLDREMPH{idx}END', em)
-
-    for idx, st in enumerate(strikes):
-        text = text.replace(f'TYPSTPLCHLDRSTRIKE{idx}END', st)
-
+    # 5. Geschützte Tokens wieder einsetzen
     for idx, s in enumerate(strongs):
         text = text.replace(f'TYPSTPLCHLDRSTRONG{idx}END', s)
 
     for idx, l in enumerate(links):
         text = text.replace(f'TYPSTPLCHLDRLINK{idx}END', l)
-
-    for idx, c in enumerate(codes):
-        text = text.replace(f'TYPSTPLCHLDRCODE{idx}END', c)
 
     return text
 
@@ -1996,50 +1951,9 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
     current_indent = False
     current_blank_count = 0
     blank_lines_count = 0
-    in_code_block = False
-    code_block_lines = []
-    code_block_blank_before = 0
 
     for line in raw_lines:
         s = line.strip()
-
-        # Fenced Code-Block (``` ... ```)
-        if s.startswith("```"):
-            if not in_code_block:
-                if current_lines:
-                    paragraphs.append({
-                        "text": "\n".join(current_lines),
-                        "raw_lines": list(current_lines),
-                        "has_indent": current_indent,
-                        "blank_lines_before": current_blank_count,
-                        "has_blank_before": bool(current_blank_count > 0)
-                    })
-                    current_lines = []
-                    current_indent = False
-                    current_blank_count = 0
-                in_code_block = True
-                code_block_lines = [line]
-                code_block_blank_before = blank_lines_count
-                blank_lines_count = 0
-                continue
-            else:
-                code_block_lines.append(line)
-                paragraphs.append({
-                    "text": "\n".join(code_block_lines),
-                    "raw_lines": list(code_block_lines),
-                    "has_indent": False,
-                    "blank_lines_before": code_block_blank_before,
-                    "has_blank_before": bool(code_block_blank_before > 0),
-                    "is_code_block": True
-                })
-                in_code_block = False
-                code_block_lines = []
-                continue
-
-        if in_code_block:
-            code_block_lines.append(line)
-            continue
-
         if not s:
             if current_lines:
                 paragraphs.append({
@@ -2220,16 +2134,6 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             "has_blank_before": bool(current_blank_count > 0)
         })
 
-    if in_code_block and code_block_lines:
-        paragraphs.append({
-            "text": "\n".join(code_block_lines),
-            "raw_lines": list(code_block_lines),
-            "has_indent": False,
-            "blank_lines_before": code_block_blank_before,
-            "has_blank_before": bool(code_block_blank_before > 0),
-            "is_code_block": True
-        })
-
     image_extensions = (".png", ".jpg", ".jpeg", ".webp", ".pdf", ".gif", ".svg", ".tiff", ".tif")
     typst_elements = []
     explicit_bib_entries = []
@@ -2295,53 +2199,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                 typst_elements.append(f"{top_v}{fig_code}")
                 continue
 
-        # 1. Markdown-Code-Block (``` ... ```)
-        if first_line.startswith("```"):
-            lang = first_line.lstrip("`").strip()
-            code_lines = []
-            for l in lines_in_para[1:]:
-                if l.strip().startswith("```"):
-                    break
-                code_lines.append(l)
-            raw_code = "\n".join(code_lines)
-            escaped_raw = raw_code.replace('\\', '\\\\').replace('"', '\\"')
-            lang_attr = f', lang: "{lang}"' if lang else ""
-            typst_elements.append(
-                f"{top_v}#align(left)[#block(width: 100%, fill: luma(246), inset: 8pt, radius: 4pt, stroke: 0.5pt + luma(220))"
-                f"[#raw(\"{escaped_raw}\", block: true{lang_attr})]]\n"
-            )
-            continue
-
-        # 1b. Markdown-Tabelle (| col1 | col2 | ...)
-        if first_line.startswith("|") and any("---" in l for l in lines_in_para):
-            table_rows = []
-            for l in lines_in_para:
-                s_l = l.strip()
-                if not s_l.startswith("|"):
-                    continue
-                if re.match(r"^\|(?:\s*:?-+:?\s*\|)+\s*$", s_l):
-                    continue
-                cells = [c.strip() for c in s_l.strip("|").split("|")]
-                table_rows.append(cells)
-            if table_rows:
-                col_count = max(len(r) for r in table_rows)
-                tbl_cells = []
-                for row_idx, r in enumerate(table_rows):
-                    is_header = (row_idx == 0)
-                    for c_idx in range(col_count):
-                        val = r[c_idx] if c_idx < len(r) else ""
-                        formatted_val = format_content_to_typst(val)
-                        if is_header:
-                            tbl_cells.append(f"[#strong[{formatted_val}]]")
-                        else:
-                            tbl_cells.append(f"[{formatted_val}]")
-                cells_str = ", ".join(tbl_cells)
-                typst_elements.append(
-                    f"{top_v}#align(center)[#table(\n  columns: {col_count},\n  align: left,\n  stroke: 0.5pt + luma(200),\n  fill: (col, row) => if row == 0 {{ luma(240) }} else {{ none }},\n  {cells_str}\n)]\n"
-                )
-                continue
-
-        # 1c. Markdown-Blockquote (> ...)
+        # 1. Markdown-Blockquote (> ...)
         if first_line.startswith(">"):
             quote_text = " ".join(re.sub(r"^>\s*", "", l).strip() for l in lines_in_para)
             escaped_quote = format_content_to_typst(quote_text)
@@ -2351,32 +2209,24 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             )
             continue
 
-        # 2. Markdown-Überschriften (#, ##, ###, ####, #####, ######)
+        # 2. Markdown-Überschriften (#, ##, ###, ####, #####, ######) - Zentriert ausschließlich bei führendem '#'
         m_heading = re.match(r"^(#{1,6})\s+(.+)$", first_line)
         if m_heading:
-            h_level = len(m_heading.group(1))
             h_text = escape_typst_line(m_heading.group(2).strip())
             h_font_arg = heading_font_spec if heading_font_spec else "none"
-            h_size_arg = f", font_size: {1.35 if h_level == 1 else (1.18 if h_level == 2 else (1.05 if h_level == 3 else 0.95))}em"
             if fmt in ("atk1", "atk2", "atk3"):
-                above_gap = "2.8em" if h_level <= 2 else "1.8em"
-                below_gap = "2.4em" if h_level <= 2 else "1.4em"
                 typst_elements.append(
-                    f"#render_section_heading([{h_text}], align_center: true, font_attr: {h_font_arg}{h_size_arg}, above_gap: {above_gap}, below_gap: {below_gap})\n"
+                    f"#render_section_heading([{h_text}], align_center: true, font_attr: {h_font_arg}, above_gap: 2.8em, below_gap: 2.8em)\n"
                 )
                 last_element_was_heading = True
             elif fmt in ("br1", "br2"):
-                above_gap = "2.0em" if h_level <= 2 else "1.4em"
-                below_gap = "1.0em" if h_level <= 2 else "0.8em"
                 typst_elements.append(
-                    f"#render_section_heading([{h_text}], align_center: false, font_attr: {h_font_arg}{h_size_arg}, above_gap: {above_gap}, below_gap: {below_gap})\n"
+                    f"#render_section_heading([{h_text}], align_center: false, font_attr: {h_font_arg}, above_gap: 2.0em, below_gap: 1.0em)\n"
                 )
                 last_element_was_heading = True
             else:
-                above_gap = "1.6em" if h_level <= 2 else "1.2em"
-                below_gap = "1.2em" if h_level <= 2 else "0.8em"
                 typst_elements.append(
-                    f"#render_section_heading([{h_text}], align_center: true, font_attr: {h_font_arg}{h_size_arg}, above_gap: {above_gap}, below_gap: {below_gap})\n"
+                    f"#render_section_heading([{h_text}], align_center: true, font_attr: {h_font_arg}, above_gap: 1.2em, below_gap: 1.2em)\n"
                 )
                 last_element_was_heading = True
             continue
