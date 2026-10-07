@@ -2046,12 +2046,18 @@ def is_single_sentence(text: str) -> bool:
         return False
     if clean.startswith(("http://", "https://", "doi:", "10.", "##", ">", "-", "*", "•")):
         return False
-    if re.match(r"^\d+[\.\)]\s+", clean):
+
+    # Führende Zählung/Gliederung (z. B. "3. ", "1.1 ", "1.1. ", "1) ", "A. ", "I. ", "Kapitel 1: ", "§ 1 ")
+    # für die Satzende-Prüfung bereinigen, damit der Gliederungspunkt nicht als Satzende missverstanden wird
+    lead_num_pattern = r"^(?:(?:Kapitel|Abschnitt|Teil|Section|Chapter|§)\s+)?(?:\d+|[A-Z]|[IVXLCDM]+)(?:[\.\)]\d+)*[\.\)]?\s*(?::\s*)?"
+    text_core = re.sub(lead_num_pattern, "", clean, flags=re.IGNORECASE).strip()
+    if not text_core:
         return False
+
     abbrev_pattern = r"\b(?:z\.?\s*B|d\.?\s*h|u\.?\s*a|bzw|etc|ca|vgl|usw|Dr|Prof|Nr|Aufl|vs|Inc|e\.?\s*V)\."
-    text_no_abbrev = re.sub(abbrev_pattern, "ABBR", clean, flags=re.IGNORECASE)
+    text_no_abbrev = re.sub(abbrev_pattern, "ABBR", text_core, flags=re.IGNORECASE)
     text_no_abbrev = re.sub(r"\b\d+\.\d+\b", "NUM", text_no_abbrev)
-    sentence_endings = list(re.finditer(r"[.!?]+(?:\s+|$)", text_no_abbrev))
+    sentence_endings = list(re.finditer(r"[.!?]+['\"»”\)]*(?:\s+|$)", text_no_abbrev))
     if not sentence_endings:
         return True
     if len(sentence_endings) == 1:
@@ -2468,12 +2474,36 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
         # A) Markdown-Rauten (#, ##, ###, ####, #####, ######)
         # B) Ein einziger, isolierter Satz (mit oder ohne Punkt am Ende für .txt-Dateien)
         m_md_heading = re.match(r"^(#{1,6})\s+(.+)$", first_line)
+
+        # Prüfe, ob es sich um eine nummerierte Liste handelt:
+        # Ein Absatz ist eine echte nummerierte Liste (und keine Überschrift), wenn:
+        # a) Mehrere Zeilen im Absatz mit einer Ziffer beginnen (z. B. "1. A\n2. B")
+        # b) ODER der Absatz ein einzelner nummerierter Eintrag ist, der unmittelbar
+        #    von einem weiteren nummerierten Eintrag gefolgt oder vorangegangen wird (dichte Sequenz ohne Fließtext)
+        #    UND es sich nicht um eine Überschrift in Versalien (ALL CAPS), mit Dezimalgliederung (z. B. 1.1)
+        #    oder mit explizitem Kapitel-/Abschnittspräfix handelt.
+        is_num_list_item = False
+        if re.match(r"^\d+[\.\)]\s+", first_line):
+            num_lines_with_digits = sum(bool(re.match(r"^\d+[\.\)]\s+", l.strip())) for l in lines_in_para)
+            if num_lines_with_digits > 1:
+                is_num_list_item = True
+            else:
+                has_decimal_structure = bool(re.match(r"^\d+\.\d+", first_line))
+                is_caps_heading = bool(flat_text.isupper() and len(flat_text.split()) > 1)
+                is_explicit_heading_prefix = bool(re.match(r"^(?:Kapitel|Abschnitt|Teil|Section|Chapter|§)\s+", first_line, re.IGNORECASE))
+                next_p = paragraphs[i + 1] if i + 1 < len(paragraphs) else None
+                prev_p = paragraphs[i - 1] if i > 0 else None
+                next_is_num = bool(next_p and re.match(r"^\d+[\.\)]\s+", next_p["text"].splitlines()[0].strip())) if next_p else False
+                prev_is_num = bool(prev_p and re.match(r"^\d+[\.\)]\s+", prev_p["text"].splitlines()[0].strip())) if prev_p else False
+                if (next_is_num or prev_is_num) and not (has_decimal_structure or is_caps_heading or is_explicit_heading_prefix):
+                    is_num_list_item = True
+
         is_isolated_sentence = (
             not para_has_indent
             and not first_line.startswith(("\t", "  "))
             and not p_info.get("is_separator")
             and not first_line.startswith(("##", ">", "-", "*", "•"))
-            and not re.match(r"^\d+[\.\)]\s+", first_line)
+            and not is_num_list_item
             and not bib_header_exact_regex.match(flat_text)
             and not bib_header_inline_regex.match(flat_text)
             and not is_apa_citation(flat_text)
