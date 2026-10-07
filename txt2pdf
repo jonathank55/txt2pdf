@@ -2603,8 +2603,17 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
             
             # Format der Einzüge und Absätze berücksichtigen:
             # Falls vor diesem Absatz in der Quelle KEINE Leerzeile war und der vorherige Block ein Fließtextabsatz war,
-            # schließt dieser Absatz nahtlos in der nächsten Zeile an (ohne vertikalen Absatzabstand)
-            if not p_info.get("has_blank_before") and blank_before == 0 and last_element_was_body_para and typst_elements:
+            # schließt dieser Absatz nahtlos in der nächsten Zeile an (ohne vertikalen Absatzabstand).
+            # Ausnahme: Wenn der vorherige Block ein Initial (#dropcap) enthält, darf kein Backslash angehängt werden,
+            # da droplet ein Block-Layout erzeugt und ein Backslash zu einem fehlerhaften Extraabstand führt.
+            can_combine_inline = (
+                not p_info.get("has_blank_before")
+                and blank_before == 0
+                and last_element_was_body_para
+                and typst_elements
+                and not typst_elements[-1].lstrip().startswith("#dropcap")
+            )
+            if can_combine_inline:
                 prev_elem = typst_elements.pop().rstrip("\n")
                 combined = f"{prev_elem}\\\n{escaped_para}\n"
                 typst_elements.append(combined)
