@@ -2068,33 +2068,46 @@ def is_single_sentence(text: str) -> bool:
 
 def can_apply_initial(raw_lines: List[str], formatted_content: str = "") -> bool:
     """
-    Prüft, ob ein Textabsatz für ein Initial (Drop Cap) qualifiziert ist:
-    1. ZWINGEND mehr als nur ein Satz (mindestens zwei vollständige Sätze).
-    2. Ein normaler, reiner Textabsatz ohne Formatierungselemente (keine Markdown-Auszeichnungen wie **, *, _, `, [], |, >, ##, etc.).
-    3. Keine Autoren-, Metadaten- oder Titelzeilen.
+    Prüft deterministisch, ob ein Textabsatz für ein Initial (Drop Cap) qualifiziert ist:
+    1. Muss Text mit mindestens einem Buchstaben enthalten.
+    2. Darf keine Überschrift (Markdown-Heading oder isolierter Titel) sein.
+    3. Darf keine Autorenzeile, kein Bild (##), keine Trennlinie, kein Blockquote (>),
+       keine Tabelle (|) und kein reiner Listenpunkt (-, *, •, 1.) sein.
     """
     raw_text = "\n".join(raw_lines).strip()
     if not raw_text:
         return False
-    # Keine Formatierungselemente: **, __, *, _, `, ~~, |, [, ], <, >, ##, http
-    if re.search(r"[*_`#|\[\]<>]|https?://|##", raw_text):
+    # Muss mindestens einen Buchstaben enthalten
+    if not re.search(r"[A-Za-zÄÖÜäöüß]", raw_text):
         return False
-    # Autorenzeilen oder Metadaten ausschließen
+    # Keine Markdown-Überschriften (#, ##, etc.)
+    if re.match(r"^#{1,6}\s+", raw_text):
+        return False
+    # Keine Bilder (##Pfad)
+    if raw_text.startswith("##"):
+        return False
+    # Keine Blockquotes (> ...)
+    if raw_text.startswith(">"):
+        return False
+    # Keine Trennlinien (---, ===, etc.)
+    if re.match(r"^[=\-_*~]{3,}\s*$", raw_text):
+        return False
+    # Keine Tabellenzeilen (| ... |)
+    if raw_text.startswith("|") or (raw_text.endswith("|") and "|" in raw_text[1:-1]):
+        return False
+    # Keine reinen Listenpunkte (- ..., * ..., • ..., 1. ...)
+    if raw_text.startswith(("- ", "* ", "• ")) or re.match(r"^\d+[\.\)]\s+", raw_text):
+        return False
+    # Keine Autorenzeilen oder isolierten Metadaten
     if is_author_name(raw_text):
         return False
-    clean = re.sub(r"^#{1,6}\s*", "", raw_text).strip()
-    abbrev_pattern = r"\b(?:z\.?\s*B|d\.?\s*h|u\.?\s*a|bzw|etc|ca|vgl|usw|Dr|Prof|Nr|Aufl|vs|Inc|e\.?\s*V)\."
-    text_no_abbrev = re.sub(abbrev_pattern, "ABBR", clean, flags=re.IGNORECASE)
-    text_no_abbrev = re.sub(r"\b\d+\.\d+\b", "NUM", text_no_abbrev)
-    endings = list(re.finditer(r"[.!?]+(?:\s+|$)", text_no_abbrev))
-    # Es muss ZWINGEND mehr als nur ein Satz sein
-    if len(endings) >= 2:
-        return True
-    if len(endings) == 1 and endings[0].end() < len(text_no_abbrev.rstrip()):
-        remaining = text_no_abbrev[endings[0].end():].strip()
-        if len(remaining.split()) >= 3:
-            return True
-    return False
+    # Keine isolierten Literaturverzeichnis-Überschriften
+    if re.match(r"^(?:Literaturverzeichnis|Quellenverzeichnis|Works Cited|Bibliography|Literatur|Quellen|References|Library|Referencias|Bibliografía|Fuentes)\b:?\s*$", raw_text, re.IGNORECASE):
+        return False
+    # Keine reinen APA-Zitate
+    if is_apa_citation(raw_text):
+        return False
+    return True
 
 
 def parse_markdown_table_to_typst(table_lines: list) -> str:
@@ -2660,6 +2673,7 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                     escaped_para = f"{top_v}{escaped_para}"
                 typst_elements.append(escaped_para + "\n")
             last_element_was_body_para = True
+            first_body_para_done = True
 
     # Falls Bilder über -i übergeben wurden, diese am Ende anhängen
     if images:
@@ -4202,6 +4216,8 @@ def convert_txt_to_pdf(
     typst_template = f"""#import "@preview/droplet:0.3.1": dropcap
 
 #show link: set text(fill: rgb("#000000"))
+#show "_": "_" + sym.zws
+#show "/": "/" + sym.zws
 
 #set page(
   paper: "a4",
