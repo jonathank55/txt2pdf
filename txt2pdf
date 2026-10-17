@@ -1694,8 +1694,10 @@ def resolve_font_spec(font_arg: str = None, fmt: str = "atk2") -> Tuple[str, str
         return FONT_DEFINITIONS["faustina"]["spec"], "Faustina"
     elif fmt in ("atk1", "atk", "artikel1", "artikel"):
         return FONT_DEFINITIONS["garamond"]["spec"], "Garamond"
-    elif fmt in ("atk3", "artikel3", "br2", "bericht2"):
+    elif fmt in ("atk3", "artikel3"):
         return FONT_DEFINITIONS["literaria"]["spec"], "Literaria"
+    elif fmt in ("br2", "bericht2"):
+        return FONT_DEFINITIONS["pt serif"]["spec"], "PT Serif"
     elif fmt in ("br1", "bericht1"):
         return FONT_DEFINITIONS["kefa iii"]["spec"], "Kefa III"
     elif fmt == "apa":
@@ -3836,7 +3838,7 @@ def convert_txt_to_pdf(
         final_gutter = gutter if gutter is not None else "0mm"
         final_font_size = font_size if font_size is not None else "10pt"
         default_leading = "0.55em"
-    else:  # br2 (Standard: 2 Spalten, 10pt Textgröße, Literaria)
+    else:  # br2 (Standard: 2 Spalten, 10pt Textgröße, PT Serif)
         final_columns = columns if columns is not None else 2
         final_initial = use_initial if use_initial is not None else False
         final_gutter = gutter if gutter is not None else "6.0mm"
@@ -4453,7 +4455,7 @@ def main():
         f"Format: {BLUE}atk2{RESET} (Kindle-Format, 3 Spalten, Faustina, Autor in Amazon Ember, ohne Linie; Standard), "
         f"{BLUE}atk1{RESET} (Artikel, 3 Spalten, Garamond, mit Linie; Überschriften zentriert), "
         f"{BLUE}atk3{RESET} (Artikel, 2 Spalten, Literaria, 10pt, Ränder riesig; Überschriften zentriert in Amazon Ember), "
-        f"{BLUE}br2{RESET} (Bericht, 2 Spalten, Literaria, 10pt; Überschriften im Blocktext), "
+        f"{BLUE}br2{RESET} (Bericht, 2 Spalten, PT Serif, 10pt; Überschriften im Blocktext), "
         f"{BLUE}br1{RESET} (Bericht, 1 Spalte, Kefa III, 10pt; Überschriften im Blocktext), "
         f"{BLUE}apa{RESET} (7. Edition APA-Bericht, US-Letter). Überschriften als isolierte Sätze; Standard: {BLUE}atk2{RESET}"
     )
