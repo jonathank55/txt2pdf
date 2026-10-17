@@ -16,7 +16,7 @@ Features:
 - Schriftarten: PT Serif (Standard via --serif), PT Mono (--mono), PT Sans (--sans), Times New Roman (--timesnew), Jost / Futura (--jost).
 - Spaltenwahl: 3-Spalten (--3col, Standard), 2-Spalten (--2col) oder 1-Spalte (--1col).
 - Single-Occurrence Author Invariant: Der Autor wird ausnahmslos genau EINMAL unter dem Titel gerendert.
-- Überschriften-Invariante: Überschriften werden anhand der Tatsache erkannt, dass ein einziger, isolierter Satz vorliegt (mit oder ohne Punkt am Ende; bei 'atk1' und 'atk2' zentriert, bei 'br1' und 'br2' im bündigen Blocktextformat). Die Erkennung anhand von '#' ist gelöscht.
+- Überschriften-Invariante: Überschriften werden anhand der Tatsache erkannt, dass ein einziger, isolierter Satz vorliegt (mit oder ohne Punkt am Ende; bei 'atk1' und 'atk2' zentriert, bei 'br1' und 'br2' im bündigen Blocktextformat). Überschriften erhalten nur dann vertikalen Zusatzabstand (above/below), wenn in der Quelle tatsächlich ein Abstand vorliegt; ohne Leerzeile schließen sie nahtlos mit normalem Zeilenabstand an.
 - Intelligente Bildplatzierung via --img (semantisches Keyword-Matching).
 - Automatisches Literaturverzeichnis (APA 7).
 """
@@ -2532,19 +2532,57 @@ def parse_body_to_typst(raw_lines: list, images: list = None, caption_size: str 
                 clean_heading = re.sub(r"^#{1,6}\s*", "", flat_text).strip()
             h_text = escape_typst_line(clean_heading)
             h_font_arg = heading_font_spec if heading_font_spec else "none"
+            # Abstandsprüfung: Überschriften brauchen NUR Abstand, wenn in der Quelle tatsächlich Abstand vorliegt
+            has_space_before = bool(blank_before > 0 or p_info.get("has_blank_before"))
+            next_p_info = paragraphs[i + 1] if i + 1 < len(paragraphs) else None
+            has_space_after = bool(next_p_info and (next_p_info.get("has_blank_before") or next_p_info.get("blank_lines_before", 0) > 0))
+            extra_lines_after = (next_p_info.get("blank_lines_before", 1) - 1) if (next_p_info and has_space_after) else 0
+
+            tight_gap = "1.15em" if fmt == "apa" else "0.55em"
+
             if fmt in ("atk1", "atk2", "atk3"):
+                if has_space_before:
+                    above_gap = f"{2.8 + (blank_before - 1) * 1.0:g}em" if blank_before > 1 else "2.8em"
+                else:
+                    above_gap = tight_gap
+
+                if has_space_after:
+                    below_gap = f"{2.8 + extra_lines_after * 1.0:g}em" if extra_lines_after > 0 else "2.8em"
+                else:
+                    below_gap = tight_gap
+
                 typst_elements.append(
-                    f"#render_section_heading([{h_text}], align_center: true, font_attr: {h_font_arg}, above_gap: 2.8em, below_gap: 2.8em)\n"
+                    f"#render_section_heading([{h_text}], align_center: true, font_attr: {h_font_arg}, above_gap: {above_gap}, below_gap: {below_gap})\n"
                 )
                 last_element_was_heading = True
             elif fmt in ("br1", "br2"):
+                if has_space_before:
+                    above_gap = f"{2.0 + (blank_before - 1) * 1.0:g}em" if blank_before > 1 else "2.0em"
+                else:
+                    above_gap = tight_gap
+
+                if has_space_after:
+                    below_gap = f"{1.0 + extra_lines_after * 1.0:g}em" if extra_lines_after > 0 else "1.0em"
+                else:
+                    below_gap = tight_gap
+
                 typst_elements.append(
-                    f"#render_section_heading([{h_text}], align_center: false, font_attr: {h_font_arg}, above_gap: 2.0em, below_gap: 1.0em)\n"
+                    f"#render_section_heading([{h_text}], align_center: false, font_attr: {h_font_arg}, above_gap: {above_gap}, below_gap: {below_gap})\n"
                 )
                 last_element_was_heading = True
             else:
+                if has_space_before:
+                    above_gap = f"{1.2 + (blank_before - 1) * 1.0:g}em" if blank_before > 1 else "1.2em"
+                else:
+                    above_gap = tight_gap
+
+                if has_space_after:
+                    below_gap = "0pt" if fmt == "apa" else (f"{1.2 + extra_lines_after * 1.0:g}em" if extra_lines_after > 0 else "1.2em")
+                else:
+                    below_gap = "0pt" if fmt == "apa" else tight_gap
+
                 typst_elements.append(
-                    f"#render_section_heading([{h_text}], align_center: true, font_attr: {h_font_arg}, above_gap: 1.2em, below_gap: 1.2em)\n"
+                    f"#render_section_heading([{h_text}], align_center: (fmt != 'apa'), font_attr: {h_font_arg}, above_gap: {above_gap}, below_gap: {below_gap})\n"
                 )
                 last_element_was_heading = True
             last_element_was_body_para = False
@@ -3117,19 +3155,32 @@ def parse_rtf_to_typst(
             clean_h = re.sub(r"^#{1,6}\s+", "", p_plain_clean).strip()
             escaped_h = format_content_to_typst(clean_h)
             h_font_arg = heading_font_spec if heading_font_spec else "none"
+            has_space_before = bool(empty_count > 0 or p.get('has_blank_before'))
+            next_p = paragraphs[idx + 1] if idx + 1 < len(paragraphs) else None
+            has_space_after = bool(next_p and (next_p.get('has_blank_before') or next_p.get('empty_count', 0) > 0))
+            extra_lines_after = (next_p.get('empty_count', 1) - 1) if (next_p and has_space_after) else 0
+
+            tight_gap = "1.15em" if fmt == "apa" else "0.55em"
+
             if fmt in ("atk1", "atk2", "atk3"):
+                above_gap = (f"{2.8 + (empty_count - 1) * 1.0:g}em" if empty_count > 1 else "2.8em") if has_space_before else tight_gap
+                below_gap = (f"{2.8 + extra_lines_after * 1.0:g}em" if extra_lines_after > 0 else "2.8em") if has_space_after else tight_gap
                 typst_blocks.append(
-                    f"#render_section_heading([{escaped_h}], align_center: true, font_attr: {h_font_arg}, above_gap: 2.8em, below_gap: 2.8em)\n"
+                    f"#render_section_heading([{escaped_h}], align_center: true, font_attr: {h_font_arg}, above_gap: {above_gap}, below_gap: {below_gap})\n"
                 )
                 last_element_was_heading = True
             elif fmt in ("br1", "br2"):
+                above_gap = (f"{2.0 + (empty_count - 1) * 1.0:g}em" if empty_count > 1 else "2.0em") if has_space_before else tight_gap
+                below_gap = (f"{1.0 + extra_lines_after * 1.0:g}em" if extra_lines_after > 0 else "1.0em") if has_space_after else tight_gap
                 typst_blocks.append(
-                    f"#render_section_heading([{escaped_h}], align_center: false, font_attr: {h_font_arg}, above_gap: 2.0em, below_gap: 1.0em)\n"
+                    f"#render_section_heading([{escaped_h}], align_center: false, font_attr: {h_font_arg}, above_gap: {above_gap}, below_gap: {below_gap})\n"
                 )
                 last_element_was_heading = True
             else:
+                above_gap = (f"{1.2 + (empty_count - 1) * 1.0:g}em" if empty_count > 1 else "1.2em") if has_space_before else tight_gap
+                below_gap = "0pt" if fmt == "apa" else ((f"{1.2 + extra_lines_after * 1.0:g}em" if extra_lines_after > 0 else "1.2em") if has_space_after else tight_gap)
                 typst_blocks.append(
-                    f"#render_section_heading([{escaped_h}], align_center: true, font_attr: {h_font_arg}, above_gap: 1.2em, below_gap: 1.2em)\n"
+                    f"#render_section_heading([{escaped_h}], align_center: (fmt != 'apa'), font_attr: {h_font_arg}, above_gap: {above_gap}, below_gap: {below_gap})\n"
                 )
                 last_element_was_heading = True
         else:
