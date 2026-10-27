@@ -2162,9 +2162,10 @@ def parse_markdown_table_to_typst(table_lines: list) -> str:
     cells_block = ",\n      ".join(cells_typst)
 
     return (
-        f"#align(center)[\n"
+        f"#align(left)[\n"
         f"  #block(width: 100%, inset: (y: 0.8em))[\n"
         f"    #set text(size: 8.5pt)\n"
+        f"    #set par(justify: false)\n"
         f"    #table(\n"
         f"      columns: {cols},\n"
         f"      align: (col, row) => ({align_array_str}).at(calc.min(col, {cols - 1})),\n"
@@ -3739,7 +3740,8 @@ def convert_txt_to_pdf(
     format_preset: str = "atk2",
     use_initial: bool = None,
     target_lang: str = None,
-    margins: str = None
+    margins: str = None,
+    left_align: bool = False
 ) -> bool:
     if not os.path.exists(input_path):
         print(f"\n{BOLD}{BLUE}=== Typst PDF-Engine (txt2pdf) ==={RESET}", file=sys.stderr)
@@ -4266,6 +4268,7 @@ def convert_txt_to_pdf(
 
     # Druckbare DIN-A4-Geometrie mit dynamischen Rändern (-r k | m | g)
     # Seitennummern nur bei mehrseitigen Dokumenten (total_pages > 1)
+    justify_directive = "false" if (left_align or fmt == "apa") else "true"
     typst_template = f"""#import "@preview/droplet:0.3.1": dropcap
 
 #show link: set text(fill: rgb("#000000"))
@@ -4297,7 +4300,7 @@ def convert_txt_to_pdf(
 )
 
 #set par(
-  justify: true,
+  justify: {justify_directive},
   leading: {final_leading},
   spacing: {final_leading},
   first-line-indent: 0pt,
@@ -4384,7 +4387,7 @@ def normalize_cli_args(raw_args):
     und unquotierte Pfade mit Leerzeichen automatisch zu einem einheitlichen Dateipfad zusammengefügt werden."""
     # Liste aller bekannten Options-Flags
     single_val_flags = {"-f", "-z", "-s", "-r", "-i", "-a", "-t", "-d", "-l", "-o"}
-    bool_flags = {"-h", "--help", "--install-fonts"}
+    bool_flags = {"-h", "--help", "--install-fonts", "--left"}
 
     flags_with_vals = []
     positional_tokens = []
@@ -4490,6 +4493,7 @@ def main():
     parser.add_argument("-l", dest="target_lang", metavar="SPRACHE", default=None, help=lang_help)
     parser.add_argument("-o", dest="output", metavar="AUSGABE", default=None, help="Ausgabepfad (.pdf)")
     parser.add_argument("--install-fonts", dest="install_fonts", action="store_true", default=False, help="Kernschriftarten überprüfen und installieren")
+    parser.add_argument("--left", dest="left_align", action="store_true", default=False, help="Linksbündiger Flattersatz statt Blocksatz")
     parser.add_argument("input_file", nargs="?", metavar="DATEI", default=None, help="Text- oder RTF/RTFD-Datei (.txt/.md/.rtf/.rtfd)")
 
     normalized_args = normalize_cli_args(sys.argv[1:])
@@ -4526,7 +4530,8 @@ def main():
         open_preview=False,
         format_preset=fmt,
         target_lang=final_target_lang,
-        margins=final_margins
+        margins=final_margins,
+        left_align=args.left_align
     )
     sys.exit(0 if success else 1)
 

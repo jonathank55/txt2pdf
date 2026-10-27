@@ -14,8 +14,8 @@ curl -fsSL https://raw.githubusercontent.com/jonathank55/txt2pdf/main/install.sh
 
 1. Repository klonen:
    ```bash
-   git clone https://github.com/jonathank55/txt2pdf.git
-   cd txt2pdf
+   git clone https://github.com/jonathank55/txt2pdf.git ~/.config/txt2pdf
+   cd ~/.config/txt2pdf
    ```
 2. Installationsskript ausführen:
    ```bash
@@ -48,5 +48,6 @@ txt2pdf DATEI [OPTIONEN]
 - `-d DATUM`   : Datum manuell überschreiben.
 - `-l SPRACHE` : Automatische Übersetzung via DeepL in die angegebene Zielsprache (`en`, `de`, etc.) vor dem Rendern.
 - `-o AUSGABE` : Zieldateipfad für das PDF festlegen.
+- `--left`     : Linksbündiger Flattersatz statt Blocksatz.
 - `--install-fonts` : Überprüft und installiert fehlende Kernschriftarten automatisch.
 - `-h`         : Hilfe anzeigen.
