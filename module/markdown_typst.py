@@ -761,10 +761,13 @@ def textkoerper_zu_typst(
                 s_z = z.strip()
                 if not s_z:
                     continue
-                if re.match(r"^\d+[\.\)]\s+", s_z):
-                    listen_zeilen.append(f"+ {inhalt_zu_typst(re.sub(r'^\\d+[\\.\\)]\\s+', '', s_z))}\n")
+                m_num = re.match(r"^(\d+)[\.\)]\s+(.*)$", s_z)
+                if m_num:
+                    nr = int(m_num.group(1))
+                    listen_praefix = f"{nr}." if (not listen_zeilen and nr > 1) else "+"
+                    listen_zeilen.append(f"{listen_praefix} {inhalt_zu_typst(m_num.group(2))}\n")
                 elif s_z.startswith(("- ", "* ", "• ")):
-                    listen_zeilen.append(f"- {inhalt_zu_typst(re.sub(r'^[-*•]\\s+', '', s_z))}\n")
+                    listen_zeilen.append(f"- {inhalt_zu_typst(re.sub(r'^[-*•]\s+', '', s_z))}\n")
                 else:
                     listen_zeilen.append(f"  {inhalt_zu_typst(s_z)}\n")
             typst_elemente.append(f"{abstand_oben}{''.join(listen_zeilen)}")

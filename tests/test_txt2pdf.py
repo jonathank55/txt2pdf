@@ -198,6 +198,27 @@ class TestMarkdownUndTextkoerper(unittest.TestCase):
         self.assertEqual(bib_eintraege, ["https://example.org/bericht"])
         self.assertFalse(hat_einzuege)
 
+    def test_nummerierte_listen_ohne_doppelte_nummerierung(self):
+        zeilen = [
+            "1. Erster Listenpunkt mit mehreren Sätzen. Zweiter Satz.",
+            "2. Zweiter Listenpunkt mit mehreren Sätzen. Zweiter Satz.",
+            "3) Dritter Listenpunkt mit Klammer.",
+            "",
+            "- Erster Stichpunkt",
+            "* Zweiter Stichpunkt",
+        ]
+        typst_body, _, _, _, _ = textkoerper_zu_typst(zeilen, fmt="atk2")
+        self.assertIn("+ Erster Listenpunkt", typst_body)
+        self.assertIn("+ Zweiter Listenpunkt", typst_body)
+        self.assertIn("+ Dritter Listenpunkt", typst_body)
+        self.assertNotIn("+ 1.", typst_body)
+        self.assertNotIn("+ 2.", typst_body)
+        self.assertNotIn("+ 3)", typst_body)
+        self.assertIn("- Erster Stichpunkt", typst_body)
+        self.assertIn("- Zweiter Stichpunkt", typst_body)
+        self.assertNotIn("- - ", typst_body)
+        self.assertNotIn("- * ", typst_body)
+
 
 class TestRtfLeser(unittest.TestCase):
     """Prüft die Konvertierung von RTF-Dokumenten in reinem Python."""
