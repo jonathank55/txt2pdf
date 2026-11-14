@@ -1,53 +1,71 @@
 # txt2pdf
 
-Ein eigenständiges Werkzeug zur typografischen Umwandlung von Text-, Markdown- und RTF/RTFD-Dateien in DIN-A4- und US-Letter-PDFs via Typst.
+Plattformunabhängiges Kommandozeilenwerkzeug zur typografischen Umwandlung von Text-, Markdown- und RTF/RTFD-Dateien in druckfertige PDFs über Typst.
+
+## Besonderheiten
+
+- **Keine Systemschriften nötig**: 34 quelloffene Schriftfamilien liegen direkt im Verzeichnis `Schriftarten/` im Programmordner und werden automatisch über `--font-path` eingebunden (inklusive quellenoffener Alternativen für klassische Verlagsschriften wie *Times New Roman*, *Garamond*, *Bodoni*, *Didot*, *Futura*, *Gill Sans*, *Optima*, *Baskerville* oder *Helvetica Neue*).
+- **Offline-fähig**: Das Typst-Paket `@preview/droplet:0.3.1` für Großinitiale liegt direkt unter `pakete/` bei.
+- **Sauberer Modulaufbau**: Strikte Trennung in `module/` (Befehlszeile, Schriftarten, Textanalyse, Markdown/Typst, RTF-Leser, Zitate, Übersetzung, Dokumentaufbau und Typst-Ausführung) sowie eigene Unit- und Integrationsprüfungen unter `tests/`.
+- **Robustes Bild- und Zitatverhalten**: Fehlende Bildpfade werden mit einem Hinweis übersprungen statt den Lauf abzubrechen; DOIs, ISBNs und URLs werden bei Bedarf parallel im APA-7-Format aufgelöst und zwischengespeichert.
 
 ## Installation
 
-### Einzeiler via Terminal (Internet-Installation)
+### Direkt über GitHub
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jonathank55/txt2pdf/main/install.sh | bash
 ```
 
-### Manuelle Installation
+### Manuell
 
-1. Repository klonen:
-   ```bash
-   git clone https://github.com/jonathank55/txt2pdf.git ~/.config/txt2pdf
-   cd ~/.config/txt2pdf
-   ```
-2. Installationsskript ausführen:
-   ```bash
-   ./install.sh
-   ```
+```bash
+git clone https://github.com/jonathank55/txt2pdf.git ~/.local/share/txt2pdf
+cd ~/.local/share/txt2pdf
+./install.sh
+```
 
-## Voraussetzungen & Schriftarten
+## Voraussetzungen
 
-- macOS oder Linux
-- Python 3 (standardmäßig vorinstalliert)
-- Typst (`brew install typst`)
-- DeepL Python-Bibliothek (`pip install deepl`, wird von `install.sh` automatisch eingerichtet)
-- Schriftarten: Kefa III, Garamond (EB Garamond, Cormorant Garamond), Times New Roman, PT Serif, Optima, Didot, Cochin, Big Caslon, Baskerville, Bodoni, Playfair Display, Faustina, Canela Text, Roboto, Monaco, Literaria, Amazon Ember (fehlende Kernschriften werden automatisch von `install.sh` oder `txt2pdf --install-fonts` installiert)
+- Linux oder macOS mit Python 3
+- Typst (`typst` im Suchpfad, z. B. über Paketverwaltung oder Homebrew)
+- Optional für `-l`/`--sprache`: Python-Paket `deepl` (`pip install deepl`) samt `DEEPL_API_KEY`
 
 ## Verwendung
 
 ```bash
-txt2pdf DATEI [OPTIONEN]
+txt2pdf [OPTIONEN] DATEI
 ```
 
-### Optionen
+### Layoutformate (`-f`, `--format`)
 
-- `-f FORMAT`  : Format-Vorgabe (`atk2` für Kindle-Format mit 3 Spalten, Faustina und Amazon Ember Autorenzeile [Standard], `atk1` für 3-Spalten-Artikel mit Didot-Titel [Ränder mittel], `atk3` für 2-Spalten-Artikel mit Literaria 10pt, riesigen Rändern und Amazon Ember Überschriften/Autorenzeile, `br2` für 2-Spalten-Bericht mit PT Serif 10pt, `br1` für 1-Spalten-Bericht mit Kefa III 10pt, `apa` für 7. Edition APA-Bericht).
-- `-z SCHRIFT` : Schriftart wählen (`Kefa III`, `Literaria`, `Amazon Ember`, `Playfair Display`, `Bodoni`, `Garamond`, `Times New Roman`, `PT Serif`, `Optima`, `Didot`, `Cochin`, `Big Caslon`, `Baskerville`, `Faustina`, `Canela Text`, `Roboto`, `Monaco`).
-- `-s GRÖßE`   : Fließtext-Größe (`6pt` bis `12pt`, Standard: 10pt bei `atk1`/`atk3`/`br1`/`br2`, 9pt bei `atk2`, 12pt bei `apa`).
-- `-r RÄNDER`  : Ränder (`m` für mittel: 16mm x, 18mm y [Standard bei `atk1`/`atk2`]; `k` für klein: 10mm x, 12mm y; `g` für groß: 22mm x, 24mm y [Standard bei `br2`]; `r` für riesig: 34mm x, 36mm y [Standard bei `br1`/`atk3`]; gilt für alle Formate außer `apa`).
-- `-i BILD`    : Abbildung einbinden (Syntax `##Pfad/zur/Datei` direkt im Textdokument verwenden).
-- `-a AUTOR`   : Autor manuell überschreiben (bei `atk` mit vorangestelltem `VON` in Calibre/Helvetica Versalien, bei anderen Profilen kursiv).
-- `-t TITEL`   : Titel manuell überschreiben (Hauptüberschrift bei `atk` dynamisch einzeilig in Didot skaliert, bei sonstigen Berichts-Profilen 6pt größer als der Text).
-- `-d DATUM`   : Datum manuell überschreiben.
-- `-l SPRACHE` : Automatische Übersetzung via DeepL in die angegebene Zielsprache (`en`, `de`, etc.) vor dem Rendern.
-- `-o AUSGABE` : Zieldateipfad für das PDF festlegen.
-- `--left`     : Linksbündiger Flattersatz statt Blocksatz.
-- `--install-fonts` : Überprüft und installiert fehlende Kernschriftarten automatisch.
-- `-h`         : Hilfe anzeigen.
+| Kürzel | Beschreibung |
+| :--- | :--- |
+| `atk2` | 3 Spalten, Faustina, 9pt, ohne Titellinie (Standard) |
+| `atk1` | 3 Spalten, EB Garamond, 10pt, mit Titellinie |
+| `atk3` | 2 Spalten, Literata, 10pt, große Ränder |
+| `br2` | 2 Spalten, PT Serif, 10pt, Berichtsformat |
+| `br1` | 1 Spalte, Bitter, 10pt, Berichtsformat |
+| `apa` | US-Letter, Tinos, 12pt, APA-7-Aufsatzformat |
+
+### Wichtigste Optionen
+
+- `-f, --format FORMAT`: Layoutformat wählen (Standard: `atk2`)
+- `-z, --schrift NAME`: Schriftart wählen (vollständige Liste mit `--schriftarten`)
+- `-s, --groesse PT`: Textgröße von `6pt` bis `12pt` (nicht bei `apa`)
+- `-r, --raender WERT`: Ränder (`k`, `m`, `g`, `r` oder Maß wie `18mm`)
+- `-o, --ausgabe PFAD`: Zielpfad der erzeugten PDF-Datei
+- `--links`: Linksbündiger Flattersatz statt Blocksatz
+- `-t, --titel TEXT`, `-a, --autor TEXT`, `-d, --datum TEXT`: Dokumentdaten überschreiben
+- `-i, --bild PFAD`: Abbildung anhängen (alternativ `##Pfad/zur/Datei` im Dokument)
+- `-l, --sprache CODE`: Optionale Übersetzung via DeepL (`en`, `de`, `es`, …)
+- `--vorschau`: Erzeugtes PDF direkt nach der Erstellung öffnen
+- `--schriftarten`: Übersicht aller mitgelieferten quelloffenen Schriftarten und Vorbilder
+- `--schriften-laden`: Fehlende Schriftarten in `Schriftarten/` nachladen
+- `-h, --help`: Kompakte Hilfe anzeigen
+
+## Tests ausführen
+
+```bash
+python3 -m unittest discover -s ~/.local/share/txt2pdf/tests -v
+```
