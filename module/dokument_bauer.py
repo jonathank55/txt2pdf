@@ -26,6 +26,8 @@ from .schriftarten import (
 from .textanalyse import (
     ist_autorenname,
     metadatenvorspann_trennen,
+    sprachcode_fuer_typst,
+    sprache_aus_dateiname,
     sprache_erkennen,
     titel_stimmt_ueberein,
     titel_und_autor_aus_dateiname,
@@ -84,6 +86,62 @@ def _sprach_beschriftungen(sprache: str) -> Tuple[str, str, str, str]:
     if sprache == "en":
         return "References", "Page", "of", "BY "
     return "Literaturverzeichnis", "Seite", "von", "VON "
+
+
+def _klartext_aus_typst(typst_text: str) -> str:
+    """Extrahiert reinen Lesetext aus erzeugtem Typst-Quelltext für die Spracherkennung."""
+    if not typst_text:
+        return ""
+    ohne_direktiven = re.sub(r"(?m)^\s*#(?:set|show|let|import)\b.*$", " ", typst_text)
+    bereinigt: List[str] = []
+    i = 0
+    n = len(ohne_direktiven)
+    while i < n:
+        if ohne_direktiven[i] == "#":
+            j = i + 1
+            while j < n and (ohne_direktiven[j].isalnum() or ohne_direktiven[j] in ("_", "-")):
+                j += 1
+            if j < n and ohne_direktiven[j] == "(":
+                tiefe = 1
+                k = j + 1
+                in_anf = False
+                while k < n and tiefe > 0:
+                    ch = ohne_direktiven[k]
+                    if ch == '"' and ohne_direktiven[k - 1] != "\\":
+                        in_anf = not in_anf
+                    elif not in_anf:
+                        if ch == "(":
+                            tiefe += 1
+                        elif ch == ")":
+                            tiefe -= 1
+                    k += 1
+                i = k
+                bereinigt.append(" ")
+                continue
+            i = j
+            bereinigt.append(" ")
+            continue
+        bereinigt.append(ohne_direktiven[i])
+        i += 1
+    text = "".join(bereinigt)
+    text = re.sub(r"\\([#$@\[\]\*<>_])", r"\1", text)
+    return re.sub(r"[\[\]]", " ", text)
+
+
+def _effektive_sprache_ermitteln(
+    zielsprache: Optional[str],
+    rohtext: str,
+    koerper_text: str,
+    ist_rtf: bool,
+    basisname: str,
+    standard_sprache: str,
+) -> str:
+    """Ermittelt den gültigen Typst-Sprachcode für Dokumenttext und Beschriftungen."""
+    if zielsprache:
+        return sprachcode_fuer_typst(zielsprache, standard_sprache)
+    sprach_text = _klartext_aus_typst(koerper_text) if ist_rtf else rohtext
+    hinweis = sprache_aus_dateiname(basisname)
+    return sprache_erkennen(sprach_text, standard_sprache, dateiname_hinweis=hinweis)
 
 
 def _kopfbereich_typst_erstellen(
@@ -403,7 +461,7 @@ def apa_typst_erzeugen(
         explizite_bib,
         bib_ueberschrift,
         _,
-        _,
+        ist_rtf,
         rohtext,
         klartext_kontext,
     ) = _inhalt_und_quellen_vorbereiten(
@@ -425,7 +483,14 @@ def apa_typst_erzeugen(
         zielsprache=zielsprache,
     )
 
-    effektive_sprache = zielsprache.lower().strip() if zielsprache else sprache_erkennen(rohtext, "en")
+    effektive_sprache = _effektive_sprache_ermitteln(
+        zielsprache=zielsprache,
+        rohtext=rohtext,
+        koerper_text=apa_koerper,
+        ist_rtf=ist_rtf,
+        basisname=basisname,
+        standard_sprache="en",
+    )
     standard_bib_titel, _, _, _ = _sprach_beschriftungen(effektive_sprache)
     end_bib_titel = bib_ueberschrift or ("References" if effektive_sprache == "en" else standard_bib_titel)
 
@@ -591,7 +656,14 @@ def standard_typst_erzeugen(
     margin_x, margin_y, nutzbreite_mm = _raender_aufloesen(fmt, raender)
     max_titelbreite = round(nutzbreite_mm * 0.85, 1)
 
-    effektive_sprache = zielsprache.lower().strip() if zielsprache else sprache_erkennen(rohtext, sprache)
+    effektive_sprache = _effektive_sprache_ermitteln(
+        zielsprache=zielsprache,
+        rohtext=rohtext,
+        koerper_text=koerper_text,
+        ist_rtf=ist_rtf,
+        basisname=basisname,
+        standard_sprache=sprache,
+    )
     standard_bib_titel, seite_wort, von_wort, autor_praefix = _sprach_beschriftungen(effektive_sprache)
     end_bib_titel = bib_ueberschrift or standard_bib_titel
     bib_titelgroesse = f"{basis_pt + 4.0:g}pt"
@@ -655,7 +727,7 @@ def standard_typst_erzeugen(
   weight: "regular",
   lang: "{effektive_sprache}",
   hyphenate: true,
-  costs: (hyphenation: 140%, orphan: 150%, widow: 150%)
+  costs: (hyphenation: 50%, orphan: 150%, widow: 150%)
 )
 
 #set par(

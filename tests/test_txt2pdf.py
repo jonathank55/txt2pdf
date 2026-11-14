@@ -4,7 +4,10 @@
 import contextlib
 import io
 import os
+import re
+import shutil
 import struct
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -20,6 +23,7 @@ from module.befehlszeile import (
     datei_umwandeln,
     hauptprogramm,
 )
+from module.dokument_bauer import apa_typst_erzeugen, standard_typst_erzeugen
 from module.konfiguration import FORMAT_PROFILE, PAKETE_ORDNER, SCHRIFTARTEN_ORDNER
 from module.markdown_typst import (
     bildpfad_aufloesen,
@@ -33,6 +37,9 @@ from module.textanalyse import (
     ist_apa_zitat,
     ist_autorenname,
     ist_einzelner_satz,
+    sprachcode_fuer_typst,
+    sprache_aus_dateiname,
+    sprache_erkennen,
     titel_und_autor_aus_dateiname,
     titel_und_autor_bereinigen,
 )
@@ -142,6 +149,44 @@ class TestTextanalyse(unittest.TestCase):
             )
         )
         self.assertFalse(ist_apa_zitat("Ein normaler Satz ohne Quellenangabe."))
+
+    def test_sprache_erkennen_kurze_texte_dateiname_und_apa(self):
+        self.assertEqual(
+            sprache_erkennen("The quick report is for all teams and projects."),
+            "en",
+        )
+        self.assertEqual(
+            sprache_erkennen("El informe para los estudiantes sobre una nueva obra."),
+            "es",
+        )
+        self.assertEqual(
+            sprache_erkennen("Le rapport pour les équipes et une analyse claire."),
+            "fr",
+        )
+        # Auch bei englischer APA-Voreinstellung muss deutscher Text erkannt werden.
+        self.assertEqual(
+            sprache_erkennen(
+                "Dieser kurze Absatz zeigt die Entwicklung in der Praxis.",
+                vorgegeben="en",
+            ),
+            "de",
+        )
+        self.assertEqual(sprache_aus_dateiname("Aufsatz - Autor (EN).txt"), "en")
+        self.assertEqual(sprache_aus_dateiname("Bericht [FR].rtf"), "fr")
+        self.assertEqual(
+            sprache_erkennen(
+                "Text 123",
+                vorgegeben="de",
+                dateiname_hinweis="Aufsatz (EN).txt",
+            ),
+            "en",
+        )
+        self.assertEqual(sprache_erkennen("Text 123", vorgegeben="es"), "es")
+        self.assertEqual(sprachcode_fuer_typst("EN-US"), "en")
+        self.assertEqual(sprachcode_fuer_typst("EN-GB"), "en")
+        self.assertEqual(sprachcode_fuer_typst("PT-BR"), "pt")
+        self.assertEqual(sprachcode_fuer_typst("deu"), "de")
+        self.assertEqual(sprachcode_fuer_typst(None, standard="de"), "de")
 
 
 class TestMarkdownUndTextkoerper(unittest.TestCase):
@@ -325,6 +370,127 @@ class TestSchriftartenUndOfflineTypst(unittest.TestCase):
                     os.environ.pop("TYPST_PACKAGE_CACHE_PATH", None)
                 else:
                     os.environ["TYPST_PACKAGE_CACHE_PATH"] = alter_cache
+
+    def test_silbentrennung_einspaltig_flattersatz_rtf_und_apa(self):
+        def _trennungen_im_pdf(pdf_pfad: str) -> int:
+            ergebnis = subprocess.run(
+                ["pdftotext", "-bbox", pdf_pfad, "-"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            return len(
+                re.findall(r"<word[^>]*>[^<]*\xad[^<]*</word>", ergebnis.stdout)
+            )
+
+        englischer_text = (
+            "Internationalization Report\n\n"
+            + " ".join(
+                [
+                    "Comprehensive organizational internationalization and telecommunications "
+                    "infrastructure require extraordinary administrative responsibilities "
+                    "across environmental transportation networks and scientific institutions."
+                ]
+                * 12
+            )
+        )
+        deutscher_text = (
+            "Verwaltungsvereinfachung in der Praxis\n\n"
+            + " ".join(
+                [
+                    "Das Bundesverfassungsgericht betont das Verantwortungsbewusstsein "
+                    "öffentlicher Arbeitsgemeinschaften bei Infrastrukturmaßnahmen und "
+                    "der wissenschaftlichen Informationsverarbeitung in der Bundesrepublik."
+                ]
+                * 12
+            )
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            en_txt = os.path.join(tmp, "bericht_en.txt")
+            de_txt = os.path.join(tmp, "bericht_de.txt")
+            en_rtf = os.path.join(tmp, "bericht_en.rtf")
+            with open(en_txt, "w", encoding="utf-8") as f:
+                f.write(englischer_text)
+            with open(de_txt, "w", encoding="utf-8") as f:
+                f.write(deutscher_text)
+            with open(en_rtf, "w", encoding="utf-8") as f:
+                f.write(
+                    "{\\rtf1\\ansi\\deff0\n"
+                    "{\\fonttbl{\\f0 Times New Roman;}}\n"
+                    "\\f0\\fs24 Internationalization Report\\par\n"
+                    "Comprehensive organizational internationalization and "
+                    "telecommunications infrastructure are essential for all teams "
+                    "across environmental transportation networks.\\par\n}"
+                )
+
+            typst_en = standard_typst_erzeugen(en_txt, "br1")
+            self.assertIn('lang: "en"', typst_en)
+            self.assertIn("costs: (hyphenation: 50%, orphan: 150%, widow: 150%)", typst_en)
+
+            typst_de = standard_typst_erzeugen(
+                de_txt, "br1", initial_verwenden=True
+            )
+            self.assertIn('lang: "de"', typst_de)
+            self.assertIn("justify: auto,", typst_de)
+
+            typst_rtf = standard_typst_erzeugen(en_rtf, "br1")
+            self.assertIn('lang: "en"', typst_rtf)
+
+            de_apa_txt = os.path.join(tmp, "bericht_apa_de.txt")
+            with open(de_apa_txt, "w", encoding="utf-8") as f:
+                f.write(
+                    deutscher_text
+                    + "\n\nMüller, A. (2023). Klimawandel in Europa. "
+                    "Zeitschrift für Praxis, 12(3), 45–60.\n"
+                )
+            typst_apa = apa_typst_erzeugen(de_apa_txt)
+            self.assertIn('lang: "de"', typst_apa)
+            self.assertIn("Literaturverzeichnis", typst_apa)
+
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                typst_ziel = standard_typst_erzeugen(
+                    de_txt, "br1", zielsprache="EN-US"
+                )
+            self.assertIn('lang: "en"', typst_ziel)
+            self.assertNotIn('lang: "en-us"', typst_ziel)
+
+            ziel_pdf = os.path.join(tmp, "ziel_en_us.pdf")
+            puffer_out = io.StringIO()
+            puffer_err = io.StringIO()
+            with contextlib.redirect_stdout(puffer_out), contextlib.redirect_stderr(puffer_err):
+                fehler = typst_kompilieren(typst_ziel, ziel_pdf)
+            self.assertIsNone(
+                fehler,
+                f"Typst-Kompilierung mit EN-US fehlgeschlagen: {fehler}\n{puffer_out.getvalue()}\n{puffer_err.getvalue()}",
+            )
+            self.assertTrue(os.path.isfile(ziel_pdf))
+
+            hat_pdftotext = shutil.which("pdftotext") is not None
+            pruefungen = [
+                (en_txt, "br1", False, "en_br1_blocksatz"),
+                (en_txt, "br1", True, "en_br1_flattersatz"),
+                (de_txt, "atk2", False, "de_atk2_blocksatz"),
+                (de_txt, "br1", False, "de_br1_blocksatz"),
+                (de_txt, "br1", True, "de_br1_flattersatz"),
+            ]
+            for eingabe, fmt, links, name in pruefungen:
+                pdf_pfad = os.path.join(tmp, f"{name}.pdf")
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                    ok = datei_umwandeln(
+                        eingabepfad=eingabe,
+                        ausgabepfad=pdf_pfad,
+                        format_vorgabe=fmt,
+                        linksbuendig=links,
+                    )
+                self.assertTrue(ok, f"Umwandlung für '{name}' fehlgeschlagen")
+                if hat_pdftotext:
+                    anzahl = _trennungen_im_pdf(pdf_pfad)
+                    self.assertGreater(
+                        anzahl,
+                        0,
+                        f"Keine Silbentrennung im erzeugten PDF '{name}' gefunden",
+                    )
 
 
 if __name__ == "__main__":

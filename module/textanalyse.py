@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """Erkennung und Bereinigung von Titeln, Autoren, Daten, Überschriften, ISBNs und Zitaten."""
 
+import os
 import re
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 import unicodedata
 
 
@@ -455,19 +456,139 @@ def ist_apa_zitat(text: str) -> bool:
     return danach.startswith((".", ":"))
 
 
-def sprache_erkennen(rohtext: str, vorgegeben: str = "de") -> str:
-    """Erkennt anhand häufiger Funktionswörter grob die Dokumentsprache (de, en oder es)."""
-    if not rohtext or vorgegeben != "de":
-        return vorgegeben
-    woerter = re.findall(r"\b[A-Za-zÀ-ÿ]+\b", rohtext.lower())
-    en_stop = {"the", "and", "in", "of", "to", "with", "is", "that", "for", "on", "as", "by", "this", "from"}
-    es_stop = {"el", "la", "los", "las", "un", "una", "de", "en", "y", "que", "por", "para", "con", "del", "al"}
-    de_stop = {"der", "die", "das", "und", "in", "von", "zu", "mit", "ist", "dass", "für", "auf", "als"}
-    en_anzahl = sum(1 for w in woerter if w in en_stop)
-    es_anzahl = sum(1 for w in woerter if w in es_stop)
-    de_anzahl = sum(1 for w in woerter if w in de_stop)
-    if es_anzahl > de_anzahl and es_anzahl > en_anzahl and es_anzahl >= 10:
-        return "es"
-    if en_anzahl > de_anzahl and en_anzahl >= 10:
-        return "en"
-    return vorgegeben
+_SPRACHCODE_ALIASE: Dict[str, str] = {
+    "eng": "en",
+    "deu": "de",
+    "ger": "de",
+    "spa": "es",
+    "fra": "fr",
+    "fre": "fr",
+    "ita": "it",
+    "por": "pt",
+    "nld": "nl",
+    "dut": "nl",
+}
+
+_BEKANNTE_SPRACHKUERZEL: Set[str] = {
+    "de", "en", "es", "fr", "it", "pt", "nl", "eng", "deu", "ger",
+}
+
+_SPRACH_STOPPWOERTER: Dict[str, Set[str]] = {
+    "de": {
+        "der", "die", "das", "den", "dem", "des", "und", "von", "zu", "zum", "zur",
+        "mit", "ist", "sind", "dass", "für", "auf", "als", "ein", "eine", "einer",
+        "eines", "einem", "einen", "nicht", "auch", "sich", "bei", "nach", "über",
+        "aus", "wie", "oder", "aber", "werden", "wird", "war", "waren", "hat", "haben",
+    },
+    "en": {
+        "the", "and", "of", "to", "with", "is", "are", "was", "were", "that",
+        "for", "on", "as", "by", "this", "from", "have", "has", "not", "which",
+        "will", "would", "can", "about", "there", "their", "they", "it", "or",
+        "but", "into", "more", "such", "when", "while", "you", "your",
+    },
+    "es": {
+        "el", "los", "las", "y", "por", "del", "al", "son", "como", "más", "pero",
+        "sus", "este", "esta", "también", "está", "están", "puede", "desde",
+        "hasta", "donde", "todo", "todos", "muy", "uno", "unos", "unas",
+    },
+    "fr": {
+        "le", "les", "des", "et", "est", "sont", "qui", "dans", "pour", "par",
+        "avec", "sur", "pas", "plus", "ce", "cette", "ces", "au", "aux", "nous",
+        "vous", "ils", "elles", "mais", "ou", "une", "du", "très", "être", "avoir",
+    },
+    "it": {
+        "il", "lo", "gli", "che", "chi", "per", "tra", "fra", "sul", "sulla",
+        "nel", "nella", "della", "dei", "delle", "è", "anche", "ma", "più",
+        "questo", "questa", "questi", "queste", "dalla", "dalle", "essere", "hanno",
+    },
+    "pt": {
+        "os", "em", "no", "na", "nos", "nas", "do", "da", "dos", "das", "não",
+        "mas", "são", "estão", "isso", "isto", "pelo", "pela", "pelos", "pelas",
+        "muito", "uma", "umas", "uns",
+    },
+    "nl": {
+        "het", "een", "en", "van", "op", "met", "voor", "aan", "dat", "dit",
+        "zijn", "wordt", "worden", "niet", "ook", "maar", "omdat", "naar", "uit",
+        "bij", "door", "over", "zij", "wij", "deze",
+    },
+}
+
+
+def sprachcode_fuer_typst(sprache: Optional[str], standard: str = "de") -> str:
+    """Normiert Sprach- und Regionsangaben (z. B. 'EN-US', 'eng') auf gültige Typst-ISO-Codes."""
+    if not sprache:
+        return standard
+    sauber = sprache.strip().lower().replace("_", "-")
+    hauptteil = sauber.split("-", 1)[0].strip()
+    hauptteil = _SPRACHCODE_ALIASE.get(hauptteil, hauptteil)
+    if re.fullmatch(r"[a-z]{2,3}", hauptteil):
+        return hauptteil
+    return standard
+
+
+def sprache_aus_dateiname(dateiname: Optional[str]) -> Optional[str]:
+    """Extrahiert einen expliziten Sprachzusatz wie '(EN)' oder '[DE]' aus dem Dateinamen."""
+    if not dateiname:
+        return None
+    name = os.path.basename(dateiname.strip())
+    # Übliche Dateiendungen (z. B. .txt, .rtf, .md) vor der Anhangssuche entfernen
+    if re.search(r"\.[A-Za-z][A-Za-z0-9]{0,5}$", name):
+        name = os.path.splitext(name)[0]
+    _, anhaenge = _sprach_und_versions_anhaenge_abspalten(name)
+    for anhang in reversed(anhaenge):
+        kern = re.sub(r"[\(\)\[\]\s]", "", anhang).lower()
+        if kern in _BEKANNTE_SPRACHKUERZEL:
+            return sprachcode_fuer_typst(kern)
+    return None
+
+
+def sprache_erkennen(
+    rohtext: str,
+    vorgegeben: str = "de",
+    dateiname_hinweis: Optional[str] = None,
+) -> str:
+    """Erkennt anhand von Funktionswörtern, Sonderzeichen und optionalem Dateinamen die Dokumentsprache."""
+    rueckfall = sprachcode_fuer_typst(vorgegeben, "de")
+    hinweis = ""
+    if dateiname_hinweis:
+        hinweis = (
+            sprache_aus_dateiname(dateiname_hinweis)
+            or sprachcode_fuer_typst(dateiname_hinweis, "")
+        )
+    if not rohtext or not rohtext.strip():
+        return hinweis or rueckfall
+
+    text_ohne_urls = re.sub(r"https?://\S+", " ", rohtext.lower())
+    woerter = re.findall(r"\b[a-zäöüßà-ÿœ]+\b", text_ohne_urls)
+    if not woerter:
+        return hinweis or rueckfall
+
+    werte: Dict[str, int] = {
+        sprache: sum(1 for w in woerter if w in stoppwoerter)
+        for sprache, stoppwoerter in _SPRACH_STOPPWOERTER.items()
+    }
+
+    # Sprachspezifische Buchstaben vorsichtig berücksichtigen, ohne Eigennamen zu überbewerten
+    if "ß" in text_ohne_urls:
+        werte["de"] += 3
+    umlaut_woerter = sum(1 for w in woerter if any(z in w for z in ("ä", "ö", "ü")))
+    if umlaut_woerter and werte["de"] > 0:
+        werte["de"] += min(umlaut_woerter, 3)
+    if any(z in text_ohne_urls for z in ("ñ", "¿", "¡")):
+        werte["es"] += 3
+    if any(z in text_ohne_urls for z in ("ã", "õ")):
+        werte["pt"] += 3
+    if "œ" in text_ohne_urls:
+        werte["fr"] += 3
+
+    rangliste = sorted(werte.items(), key=lambda eintrag: eintrag[1], reverse=True)
+    beste_sprache, bester_wert = rangliste[0]
+    _, zweiter_wert = rangliste[1]
+
+    if bester_wert >= 3 and bester_wert > zweiter_wert:
+        return beste_sprache
+    if bester_wert >= 2 and zweiter_wert == 0:
+        return beste_sprache
+    if hinweis and (bester_wert == 0 or hinweis == beste_sprache or werte.get(hinweis, 0) >= zweiter_wert):
+        return hinweis
+    return rueckfall

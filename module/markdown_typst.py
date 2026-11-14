@@ -323,7 +323,7 @@ def initial_anwenden(
         f"#dropcap(\n"
         f"  height: {hoehe},\n"
         f"  gap: {abstand},\n"
-        f"  justify: true,\n"
+        f"  justify: auto,\n"
         f"  transform: it => text(font: {schrift}{gewicht_zusatz}, it)\n"
         f")[{s}]"
     )
